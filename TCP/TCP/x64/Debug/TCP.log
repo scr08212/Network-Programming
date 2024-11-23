@@ -1,0 +1,10 @@
+﻿  main.cpp
+D:\Projects\Server\Network-Programming\TCP\main.cpp(6,9): warning C4005: '_WIN32_WINNT': 매크로 재정의
+  Server.cpp
+      C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared\sdkddkver.h(228,10):
+      '_WIN32_WINNT'의 이전 정의를 참조하십시오.
+  
+  Server.h
+  코드를 생성하고 있습니다...
+TCP\x64\Debug\Server.obj : warning LNK4042: 개체가 두 번 이상 지정되었습니다. 나머지는 무시됩니다.
+  TCP.vcxproj -> D:\Projects\Server\Network-Programming\TCP\x64\Debug\TCP.exe
