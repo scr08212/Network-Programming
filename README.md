@@ -13,8 +13,8 @@
 ## 배점
 
 #### IPv4/IPv6 x TCP/UDP
-- [ ] IPv4/TCP (10점) 남경민
-- [ ] IPv6/TCP (10점) 남경민
+- [v] IPv4/TCP (10점) 남경민
+- [v] IPv6/TCP (10점) 남경민
 - [ ] IPv4/UDP (10점) 이도형
 - [ ] IPv6/UDP (10점) 이도형
       
