@@ -1,3 +1,7 @@
+ï»¿#define _CRT_SECURE_NO_WARNINGS
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _WIN32_WINNT 0x0601
+
 #pragma once
 #include "Client.h"
 #include <iostream>
@@ -6,15 +10,11 @@
 #include <Windows.h>
 #include <thread>
 
-#pragma comment(lib, "Ws2_32.lib")
-
-#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _WIN32_WINNT 0x0601
-#define BUFSIZE 2048
+#pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
 
+#define BUFSIZE 2048
 
 Client::Client()
     :serverAddr("127.0.0.1"), serverPort(9000), clientSocket(NULL), isIPv6(false), sockAddrStorage({})
@@ -57,7 +57,7 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
         if (strlen(buf) == 0)
             continue;
 
-        // Çì´õ
+        // í—¤ë”
         uint8_t type = 0x01;
         uint32_t length = (uint32_t)len;
 
@@ -68,7 +68,7 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
         send(clientSocket, header, 5, 0);
         send(clientSocket, buf, len, 0);
 
-        printf("%d + %d ¹ÙÀÌÆ®¸¦ º¸³Â½À´Ï´Ù.\n", 5, length);
+        printf("%d + %d ë°”ì´íŠ¸ë¥¼ ë³´ëƒˆìŠµë‹ˆë‹¤.\n", 5, length);
     }
     recvThread.join();
 
@@ -147,8 +147,8 @@ void Client::receive()
         string data(buf + 5, length);
         data += '\0';
 
-        printf("[TCP Å¬¶óÀÌ¾ğÆ®] %d¹ÙÀÌÆ®¸¦ ¹Ş¾Ò½À´Ï´Ù.\n", received);
-        printf("[¹ŞÀº µ¥ÀÌÅÍ] %s\n", data.c_str());
+        printf("[TCP í´ë¼ì´ì–¸íŠ¸] %dë°”ì´íŠ¸ë¥¼ ë°›ì•˜ìŠµë‹ˆë‹¤.\n", received);
+        printf("[ë°›ì€ ë°ì´í„°] %s\n", data.c_str());
     }
     return;
 }

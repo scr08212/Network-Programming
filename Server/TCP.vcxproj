@@ -128,7 +128,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DualStackServer.h" />
     <ClCompile Include="ServerMain.cpp" />
     <ClCompile Include="Server.cpp" />
     <ClCompile Include="Server.h" />

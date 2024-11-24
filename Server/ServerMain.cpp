@@ -1,16 +1,15 @@
 #include "Server.h"
-#include <iostream>
 
 int main(int argc, char* argv[])
 {
     //TODO: 
-    // [v]: dual stackÀ¸·Î IPv4, IPv6 µ¿½Ã Ã³¸®
-    // [v]: ¸ÖÆ¼¾²·¹µå·Î TCP¿¬°á
-    // [v]: Á¢¼ÓÁßÀÎ Å¬¶óÀÌ¾ðÆ®¿¡ ¹ÞÀº ¸Þ½ÃÁö º¸³»±â 
-    // [ ]: ÀÌ¹ÌÁö/ÅØ½ºÆ®ÆÄÀÏ Ã³¸®
-    // [ ]: ½Ç½Ã°£ µå·ÎÀ× Ã³¸®
-    // [ ]: ÀÌ¹ÌÁö/ÅØ½ºÆ®ÆÄÀÏ µî ÀÔ·Â Å¸ÀÔÀº µ¥ÀÌÅÍ ¾Õ¿¡ 4¹ÙÀÌÆ® typeÀ¸·Î °áÁ¤
-    // [ ]: IPv4 °¨Áö ÈÄ ÁÖ¼Ò Ãâ·Â½Ã IPv4 ºÎºÐ¸¸ Ãâ·ÂµÇ°Ô Ã³¸®
+    // [v]: dual stackìœ¼ë¡œ IPv4, IPv6 ë™ì‹œ ì²˜ë¦¬
+    // [v]: ë©€í‹°ì“°ë ˆë“œë¡œ TCPì—°ê²°
+    // [v]: ì ‘ì†ì¤‘ì¸ í´ë¼ì´ì–¸íŠ¸ì— ë°›ì€ ë©”ì‹œì§€ ë³´ë‚´ê¸° 
+    // [ ]: ì´ë¯¸ì§€/í…ìŠ¤íŠ¸íŒŒì¼ ì²˜ë¦¬
+    // [ ]: ì‹¤ì‹œê°„ ë“œë¡œìž‰ ì²˜ë¦¬
+    // [ ]: ì´ë¯¸ì§€/í…ìŠ¤íŠ¸íŒŒì¼ ë“± ìž…ë ¥ íƒ€ìž…ì€ ë°ì´í„° ì•žì— 4ë°”ì´íŠ¸ typeìœ¼ë¡œ ê²°ì •
+    // [ ]: IPv4 ê°ì§€ í›„ ì£¼ì†Œ ì¶œë ¥ì‹œ IPv4 ë¶€ë¶„ë§Œ ì¶œë ¥ë˜ê²Œ ì²˜ë¦¬
 
     Server server(9000);
     server.start();

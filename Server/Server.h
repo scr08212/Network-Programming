@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <vector>
 #include <WinSock2.h> // DWORD 
 #include <string>

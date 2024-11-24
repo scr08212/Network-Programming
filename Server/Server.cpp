@@ -1,3 +1,7 @@
+ï»¿#define _CRT_SECURE_NO_WARNINGS
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _WIN32_WINNT 0x0601
+
 #pragma once
 #include "Server.h"
 #include <iostream>
@@ -9,10 +13,6 @@
 #include <thread>
 
 #pragma comment(lib, "ws2_32.lib")
-
-#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _WIN32_WINNT 0x0601
 
 using namespace std;
 
@@ -104,7 +104,7 @@ void Server::acceptClients()
         char addr[INET6_ADDRSTRLEN] = { 0 };
         sockaddr_in6* s = (sockaddr_in6*)&client_addr;
         inet_ntop(AF_INET6, &s->sin6_addr, addr, sizeof(addr));
-        printf("\n[TCP/IPv6 ¼­¹ö] Å¬¶óÀÌ¾ğÆ® Á¢¼Ó: IP ÁÖ¼Ò = %s, Æ÷Æ®¹øÈ£ = %d\n", addr, ntohs(client_addr.sin6_port));
+        printf("\n[TCP/IPv6 ì„œë²„] í´ë¼ì´ì–¸íŠ¸ ì ‘ì†: IP ì£¼ì†Œ= %s, í¬íŠ¸ ë²ˆí˜¸ = %d\n", addr, ntohs(client_addr.sin6_port));
 
         clients.push_back(client_sock);
         std::thread(&Server::handleClient, this, client_sock).detach();
@@ -164,7 +164,7 @@ void Server::handleClient(SOCKET client)
 
     clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
     closesocket(client);
-    printf("[TCP ¼­¹ö] Å¬¶óÀÌ¾ğÆ® Á¾·á: IPÁÖ¼Ò = %s, Æ÷Æ® ¹øÈ£ = %d\n", addr, clientAddr.sin6_port);
+    printf("[TCP/IPv6 ì„œë²„] í´ë¼ì´ì–¸íŠ¸ ì¢…ë£Œ: IP ì£¼ì†Œ= %s, í¬íŠ¸ ë²ˆí˜¸ = %dd\n", addr, clientAddr.sin6_port);
     return;
 }
 
@@ -172,13 +172,13 @@ void Server::handleData(uint8_t type, string data)
 {
     switch (type)
     {
-    case 0x01: // ¸Ş½ÃÁö 
+    case 0x01: // ë©”ì‹œì§€
         cout << "message received: " << data << endl;
         break;
-    case 0x02: // ÆÄÀÏ
+    case 0x02: // íŒŒì¼
         cout << "File received" << endl;
         break;
-    case 0x03: // ½Ç½Ã°£ µå·ÎÀ×
+    case 0x03: // ë“œë¡œì‰
         cout << "Drawing command received" << endl;
         break;
     default:
