@@ -1,6 +1,7 @@
 #pragma once
 #include <WinSock2.h>
 #include <string>
+#include <filesystem>
 
 using namespace std;
 
@@ -23,9 +24,10 @@ private:
 
     void sendMessage(string msg);
 
-    void sendFile(string filePath);
+    void sendFile(std::filesystem::path filePath);
 
     void sendDrawing();
+
 public:
     Client();
 

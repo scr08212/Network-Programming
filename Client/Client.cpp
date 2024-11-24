@@ -10,10 +10,13 @@
 #include <Windows.h>
 #include <thread>
 #include <fstream>
+#include <filesystem>
 
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
+
+namespace fs = std::filesystem;
 
 #define BUFSIZE 2048
 #define HEADERSIZE 5
@@ -71,14 +74,14 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
         if (msg[msg.length() - 1] == '\n')
             msg[msg.length() - 1] = '\0';
 
-        uint8_t type = MESSAGE; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
+        uint8_t type = FILE; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
         switch (type)
         {
         case MESSAGE:
             sendMessage(msg);
             break;
         case FILE:
-            sendFile("D:/Projects/Server/Network-Programming/Client/dummyText.txt"); // 절대경로. 자신에 맞는 파일 위치로 하거나, 실행파일 있는 곳에 파일 두고 상대경로로 사용.
+            sendFile("D:/Projects/Server/Network-Programming/Client/cat.png"); // 절대경로. 자신에 맞는 파일 위치로 하거나, 실행파일 있는 곳에 파일 두고 상대경로로 사용.
             break;
         case DRAWING:
             sendDrawing(); // 아직 구현 x 그리기가 어떤 방식인지 알아야됨.
@@ -132,37 +135,62 @@ void Client::sendMessage(string msg)
         logError("send()", true);
 }
 
-void Client::sendFile(string filePath)
+void Client::sendFile(fs::path filePath)
 {
     uint8_t type = FILE;
 
-    ifstream file(filePath, ios::binary);
+    // 파일 열기
+    std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open())
     {
         logError("file()", false);
         return;
     }
 
-    file.seekg(0, ios::end);
-    int fileSize = (int)file.tellg();
-    file.seekg(0, ios::beg);
+    // 파일 크기 가져오기
+    file.seekg(0, std::ios::end);
+    std::streamsize fileSize = file.tellg();
+    file.seekg(0, std::ios::beg);
 
-    char* buf = (char*)malloc(sizeof(char) * fileSize);
-    file.read(buf, fileSize);
+    // 파일 데이터를 읽어서 바이너리로 저장
+    std::vector<char> buffer(fileSize);
+    if (!file.read(buffer.data(), fileSize))
+    {
+        logError("file.read()", false);
+        return;
+    }
 
-    string data(buf, fileSize);
-   
-    uint32_t length = (uint32_t)strlen(data.c_str());
+    // 파일명 얻기
+    std::string filename = filePath.filename().string();
 
+    // 파일명과 바이너리 데이터를 합침 (파일명?바이너리 데이터)
+    std::string data = filename + "?" + std::string(buffer.begin(), buffer.end());
+
+    // 데이터 길이 계산
+    uint32_t length = static_cast<uint32_t>(data.size());
+
+    // 헤더 생성
     char header[HEADERSIZE] = {};
-    header[0] = type;
+    header[0] = type; // 타입 설정
     memcpy(header + 1, &length, sizeof(length));
 
+    // 헤더 전송
     if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-        logError("send()", true);
+    {
+        logError("send(header)", true);
+        return;
+    }
+
+    // 데이터 전송
     if (send(clientSocket, data.c_str(), length, 0) == SOCKET_ERROR)
-        logError("send()", true);
+    {
+        logError("send(data)", true);
+        return;
+    }
+
+    std::cout << "File sent successfully: " << filename << std::endl;
 }
+
 
 void Client::sendDrawing()
 {
@@ -240,18 +268,45 @@ void Client::receive()
         printf("[받은 데이터] %s\n", data.c_str());
 
         // 후처리
-        switch (type)
+        if (type == MESSAGE)
         {
-        case MESSAGE:
-            break;
-        case FILE:
-            // # send 수행시 바이너리 데이터의 시작부분에 파일명.확장자? 형식으로 문자열 삽입
-            // 1. recv 때, data의 앞에서부터 ?가 나올때까지 문자열 읽기. 이후 파일명, 확장자명 확인
-            // 2. ofstream으로 파일 생성
-            break;
-        case DRAWING:
+
+        }
+        else if (type == FILE)
+        {
+           // # send 수행시 바이너리 데이터의 시작부분에 파일명.확장자? 형식으로 문자열 삽입
+           // 1. recv 때, data의 앞에서부터 ?가 나올때까지 문자열 읽기. 이후 파일명, 확장자명 확인
+           // 2. ofstream으로 파일 생성
+
+            size_t delimiterPos = data.find('?');
+            if (delimiterPos == std::string::npos)
+                break;
+
+            string outputDirectory = "output/";
+            if (!filesystem::exists(outputDirectory))
+                filesystem::create_directories(outputDirectory);
+
+            string fileName = data.substr(0, delimiterPos);
+            string binaryData = data.substr(delimiterPos + 1);
+
+            outputDirectory += fileName;
+            // 결과 출력
+            cout << "File Name: " << fileName << endl;
+            cout << "Binary Data: " << binaryData << endl;
+
+            ofstream outputFile(outputDirectory, ios::binary);
+            if (!outputFile.is_open())
+                break;
+
+            outputFile.write(binaryData.c_str(), binaryData.size());
+            outputFile.close();
+
+            cout << "File saved!" << endl;
+        }
+        else if (type == DRAWING)
+        {
             // 실시간 그리기 형식이 어떤지 확인해봐야함
-            break;
+
         }
 
     }
