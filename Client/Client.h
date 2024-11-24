@@ -21,6 +21,11 @@ private:
 
     sockaddr* getSockAddr();
 
+    void sendMessage(string msg);
+
+    void sendFile(string filePath);
+
+    void sendDrawing();
 public:
     Client();
 

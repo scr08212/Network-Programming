@@ -1,4 +1,1 @@
-﻿  Client.cpp
-  ClientMain.cpp
-  코드를 생성하고 있습니다...
-  Client.vcxproj -> D:\Projects\Server\Network-Programming\Server\x64\Debug\Client.exe
+﻿LINK : fatal error LNK1168: D:\Projects\Server\Network-Programming\Server\x64\Debug\Client.exe을(를) 쓰기용으로 열 수 없습니다.

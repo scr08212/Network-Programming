@@ -3,25 +3,28 @@
   "WorkspaceRootPath": "D:\\Projects\\Server\\Network-Programming\\Server\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|D:\\Projects\\Server\\Network-Programming\\Server\\Server.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
-      "RelativeMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|solutionrelative:Server.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|D:\\Projects\\Server\\Network-Programming\\Server\\Server.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
-      "RelativeMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|solutionrelative:Server.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{DF28AE0B-AC30-426A-A6BD-F39DE6BF71A0}|..\\Client\\Client.vcxproj|D:\\Projects\\Server\\Network-Programming\\Client\\Client.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{DF28AE0B-AC30-426A-A6BD-F39DE6BF71A0}|..\\Client\\Client.vcxproj|D:\\Projects\\Server\\Network-Programming\\Client\\Client.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{DF28AE0B-AC30-426A-A6BD-F39DE6BF71A0}|..\\Client\\Client.vcxproj|D:\\Projects\\Server\\Network-Programming\\Client\\ClientMain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{DF28AE0B-AC30-426A-A6BD-F39DE6BF71A0}|..\\Client\\Client.vcxproj|D:\\Projects\\Server\\Network-Programming\\Client\\dummyText.txt||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|D:\\Projects\\Server\\Network-Programming\\Server\\ServerMain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
       "RelativeMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|solutionrelative:ServerMain.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{DF28AE0B-AC30-426A-A6BD-F39DE6BF71A0}|..\\Client\\Client.vcxproj|D:\\Projects\\Server\\Network-Programming\\Client\\Client.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|D:\\Projects\\Server\\Network-Programming\\Server\\Server.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|solutionrelative:Server.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|D:\\Projects\\Server\\Network-Programming\\Server\\Server.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A5FD147A-2F58-416B-ABFF-3F1D0D0917E4}|TCP.vcxproj|solutionrelative:Server.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     }
   ],
   "DocumentGroupContainers": [
@@ -31,77 +34,95 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 5,
+          "SelectedChildIndex": 3,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "ServerMain.cpp",
-              "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Server\\ServerMain.cpp",
-              "RelativeDocumentMoniker": "ServerMain.cpp",
-              "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Server\\ServerMain.cpp",
-              "RelativeToolTip": "ServerMain.cpp",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2024-11-24T02:39:58.345Z"
+              "DocumentIndex": 2,
+              "Title": "dummyText.txt",
+              "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Client\\dummyText.txt",
+              "RelativeDocumentMoniker": "..\\Client\\dummyText.txt",
+              "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Client\\dummyText.txt",
+              "RelativeToolTip": "..\\Client\\dummyText.txt",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAABnCwAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003109|",
+              "WhenOpened": "2024-11-24T05:50:53.306Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 1,
               "Title": "ClientMain.cpp",
               "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Client\\ClientMain.cpp",
               "RelativeDocumentMoniker": "..\\Client\\ClientMain.cpp",
               "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Client\\ClientMain.cpp",
               "RelativeToolTip": "..\\Client\\ClientMain.cpp",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAEAAAATAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAA0AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2024-11-24T02:41:13.533Z"
+              "WhenOpened": "2024-11-24T02:41:13.533Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "Client.h",
               "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Client\\Client.h",
               "RelativeDocumentMoniker": "..\\Client\\Client.h",
               "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Client\\Client.h",
               "RelativeToolTip": "..\\Client\\Client.h",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAARAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABsAAAALAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
-              "WhenOpened": "2024-11-24T01:19:25.909Z"
+              "WhenOpened": "2024-11-24T01:19:25.909Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 0,
               "Title": "Client.cpp",
               "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Client\\Client.cpp",
               "RelativeDocumentMoniker": "..\\Client\\Client.cpp",
               "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Client\\Client.cpp",
               "RelativeToolTip": "..\\Client\\Client.cpp",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB0AAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAE8AAAAAAAAAAAAiwIMAAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
-              "WhenOpened": "2024-11-24T01:20:14.744Z"
+              "WhenOpened": "2024-11-24T01:20:14.744Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
+              "Title": "ServerMain.cpp",
+              "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Server\\ServerMain.cpp",
+              "RelativeDocumentMoniker": "ServerMain.cpp",
+              "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Server\\ServerMain.cpp",
+              "RelativeToolTip": "ServerMain.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2024-11-24T02:39:58.345Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
               "Title": "Server.h",
               "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Server\\Server.h",
               "RelativeDocumentMoniker": "Server.h",
               "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Server\\Server.h",
               "RelativeToolTip": "Server.h",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAAAHAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACIAAAAZAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
-              "WhenOpened": "2024-11-22T14:51:50.98Z"
+              "WhenOpened": "2024-11-22T14:51:50.98Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 6,
               "Title": "Server.cpp",
               "DocumentMoniker": "D:\\Projects\\Server\\Network-Programming\\Server\\Server.cpp",
               "RelativeDocumentMoniker": "Server.cpp",
               "ToolTip": "D:\\Projects\\Server\\Network-Programming\\Server\\Server.cpp",
               "RelativeToolTip": "Server.cpp",
-              "ViewState": "AgIAADwAAAAAAAAAAAAAAG4AAAAFAAAAAAAAAA==",
+              "ViewState": "AgIAAGEAAAAAAAAAAAAAAH4AAAAnAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2024-11-22T15:04:59.97Z",
               "EditorCaption": ""

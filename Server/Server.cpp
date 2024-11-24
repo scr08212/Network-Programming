@@ -21,10 +21,6 @@ Server::Server(int server_port)
 {
     serverSocket = NULL;
     clients = {};
-
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-        return;
 }
 
 Server::~Server()
@@ -77,6 +73,10 @@ void Server::initializeSocket()
 
 void Server::start()
 {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+        return;
+
     initializeSocket();
     cout << "Server is running on port " << port << endl;
 
@@ -95,43 +95,23 @@ void Server::acceptClients()
         struct sockaddr_in6 client_addr = {};
         int addrlen = sizeof(client_addr);
         SOCKET client_sock = accept(serverSocket, (sockaddr*)&client_addr, &addrlen);
+
         if (client_sock == INVALID_SOCKET)
         {
             logError("accept()");
             break;
         }
-
-        char addr[INET6_ADDRSTRLEN] = { 0 };
-        sockaddr_in6* s = (sockaddr_in6*)&client_addr;
-        inet_ntop(AF_INET6, &s->sin6_addr, addr, sizeof(addr));
-        printf("\n[TCP/IPv6 서버] 클라이언트 접속: IP 주소= %s, 포트 번호 = %d\n", addr, ntohs(client_addr.sin6_port));
-
+        ClientInfo info = getClientInfo(client_addr);
+        printf("\n[TCP/%s 서버] 클라이언트 접속: IP 주소= %s, 포트 번호 = %d\n", (info.isIPv4 ? "IPv4" : "IPv6"), info.address.c_str(), info.port);
         clients.push_back(client_sock);
-        std::thread(&Server::handleClient, this, client_sock).detach();
+        std::thread(&Server::handleClient, this, client_sock, client_addr).detach();
     }
 
     return;
 }
 
-void Server::broadCast(SOCKET from, const char* buf, int len, bool loop_back)
+void Server::handleClient(SOCKET client, sockaddr_in6 sock_addr)
 {
-    int retval;
-    for (SOCKET client : clients)
-    {
-        if (!loop_back && client == from)
-            continue;
-        retval = send(client, buf, len, 0);
-    }
-}
-
-void Server::handleClient(SOCKET client)
-{
-    char addr[INET6_ADDRSTRLEN];
-    struct sockaddr_in6 clientAddr;
-    int addrLen = sizeof(clientAddr);
-    getpeername(client, (struct sockaddr*)&clientAddr, &addrLen);
-    inet_ntop(AF_INET6, &clientAddr.sin6_addr, addr, sizeof(addr));
-
     while (true)
     {
         char header[5]; // 0: type 1~4: dataSize
@@ -163,9 +143,22 @@ void Server::handleClient(SOCKET client)
     }
 
     clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
+
+    ClientInfo info = getClientInfo(sock_addr);
+    printf("\n[TCP/%s 서버] 클라이언트 종료: IP 주소= %s, 포트 번호 = %d\n", (info.isIPv4 ? "IPv4" : "IPv6"), info.address.c_str(), info.port);
     closesocket(client);
-    printf("[TCP/IPv6 서버] 클라이언트 종료: IP 주소= %s, 포트 번호 = %dd\n", addr, clientAddr.sin6_port);
     return;
+}
+
+void Server::broadCast(SOCKET from, const char* buf, int len, bool loop_back)
+{
+    int retval;
+    for (SOCKET client : clients)
+    {
+        if (!loop_back && client == from)
+            continue;
+        retval = send(client, buf, len, 0);
+    }
 }
 
 void Server::handleData(uint8_t type, string data)
@@ -185,4 +178,28 @@ void Server::handleData(uint8_t type, string data)
         cout << "Unknown Type: "<< type << endl;
         break;
     }
+}
+
+Server::ClientInfo Server::getClientInfo(sockaddr_in6 sockAddr)
+{
+    ClientInfo info{};
+
+    char addr[INET6_ADDRSTRLEN];
+    sockaddr_in6* s = (sockaddr_in6*)&sockAddr;
+    if (IN6_IS_ADDR_V4MAPPED(&s->sin6_addr))
+    {
+        struct in_addr ipv4_addr;
+        memcpy(&ipv4_addr, &s->sin6_addr.s6_addr[12], sizeof(ipv4_addr));
+        inet_ntop(AF_INET, &ipv4_addr, addr, sizeof(addr));
+        info.isIPv4 = true;
+    }
+    else
+    {
+        inet_ntop(AF_INET6, &s->sin6_addr, addr, sizeof(addr));
+        info.isIPv4 = false;
+    }
+
+    info.address = addr;  // std::string에 직접 할당
+    info.port = ntohs(sockAddr.sin6_port);
+    return info;
 }

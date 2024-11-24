@@ -9,19 +9,22 @@
 #include <ws2tcpip.h>
 #include <Windows.h>
 #include <thread>
+#include <fstream>
 
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
 
 #define BUFSIZE 2048
+#define HEADERSIZE 5
+#define MESSAGE 0X01
+#define FILE 0x02
+#define DRAWING 0X03
 
 Client::Client()
     :serverAddr("127.0.0.1"), serverPort(9000), clientSocket(NULL), isIPv6(false), sockAddrStorage({})
 {
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-        return;
+
 }
 
 Client::~Client()
@@ -30,6 +33,10 @@ Client::~Client()
 
 void Client::connectToServer(string addr, int port, bool isIPv6)
 {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+        return;
+
     serverAddr = addr;
     serverPort = port;
     this->isIPv6 = isIPv6;
@@ -47,28 +54,38 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
     thread recvThread(&Client::receive, this);
     while (true)
     {
-        ZeroMemory(buf, sizeof(buf));
-        if (fgets(buf, BUFSIZE, stdin) == NULL)
-            break;
+        string msg = "";
 
-        len = (int)strlen(buf);
-        if (buf[len - 1] == '\n')
-            buf[len - 1] = '\0';
-        if (strlen(buf) == 0)
+        if (fgets(buf, BUFSIZE, stdin)) {
+            msg.append(buf);
+
+            while (strchr(buf, '\n') == NULL && !feof(stdin)) {
+                if (fgets(buf, BUFSIZE, stdin)) {
+                    msg.append(buf);
+                }
+            }
+        }
+
+        if (msg.length() == 0)
             continue;
+        if (msg[msg.length() - 1] == '\n')
+            msg[msg.length() - 1] = '\0';
 
-        // 헤더
-        uint8_t type = 0x01;
-        uint32_t length = (uint32_t)len;
-
-        char header[5] = {};
-        header[0] = type;
-        memcpy(header + 1, &length, sizeof(length));
-
-        send(clientSocket, header, 5, 0);
-        send(clientSocket, buf, len, 0);
-
-        printf("%d + %d 바이트를 보냈습니다.\n", 5, length);
+        uint8_t type = MESSAGE; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
+        switch (type)
+        {
+        case MESSAGE:
+            sendMessage(msg);
+            break;
+        case FILE:
+            sendFile("D:/Projects/Server/Network-Programming/Client/dummyText.txt"); // 절대경로. 자신에 맞는 파일 위치로 하거나, 실행파일 있는 곳에 파일 두고 상대경로로 사용.
+            break;
+        case DRAWING:
+            sendDrawing(); // 아직 구현 x 그리기가 어떤 방식인지 알아야됨.
+            break;
+        default:
+            break;
+        }
     }
     recvThread.join();
 
@@ -96,6 +113,59 @@ sockaddr* Client::getSockAddr()
     }
 
     return (sockaddr*)&sockAddrStorage;
+}
+
+void Client::sendMessage(string msg)
+{
+    // 헤더
+    uint8_t type = MESSAGE;
+    uint32_t length = (uint32_t)strlen(msg.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type;
+    memcpy(header + 1, &length, sizeof(length));
+
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+        logError("send()", true);
+    
+    if (send(clientSocket, msg.c_str(), length, 0) == SOCKET_ERROR)
+        logError("send()", true);
+}
+
+void Client::sendFile(string filePath)
+{
+    uint8_t type = FILE;
+
+    ifstream file(filePath, ios::binary);
+    if (!file.is_open())
+    {
+        logError("file()", false);
+        return;
+    }
+
+    file.seekg(0, ios::end);
+    int fileSize = (int)file.tellg();
+    file.seekg(0, ios::beg);
+
+    char* buf = (char*)malloc(sizeof(char) * fileSize);
+    file.read(buf, fileSize);
+
+    string data(buf, fileSize);
+   
+    uint32_t length = (uint32_t)strlen(data.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type;
+    memcpy(header + 1, &length, sizeof(length));
+
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+        logError("send()", true);
+    if (send(clientSocket, data.c_str(), length, 0) == SOCKET_ERROR)
+        logError("send()", true);
+}
+
+void Client::sendDrawing()
+{
 }
 
 void Client::logError(const char* msg, bool fatal)
@@ -132,7 +202,7 @@ void Client::receive()
 {
     while (true)
     {
-        char buf[BUFSIZE]; // 0: type 1~4: dataSize
+        char buf[BUFSIZE] = {};
         int received = recv(clientSocket, buf, BUFSIZE, 0);
         if (received <= 0)
         {
@@ -144,11 +214,46 @@ void Client::receive()
         uint32_t length;
         memcpy(&length, buf + 1, 4);
 
-        string data(buf + 5, length);
-        data += '\0';
 
-        printf("[TCP 클라이언트] %d바이트를 받았습니다.\n", received);
+        string data;
+        if (received > HEADERSIZE)
+        {
+            data = string(buf + HEADERSIZE, received - HEADERSIZE);
+        }
+
+        // 전체 데이터가 더 있다면 반복하여 계속 받기
+        uint32_t totalReceived = received - HEADERSIZE;
+        while (totalReceived < length)
+        {
+            int nextReceived = recv(clientSocket, buf, BUFSIZE, 0);
+            if (nextReceived <= 0)
+            {
+                logError("recv()", true);
+                break;
+            }
+
+            data.append(buf, nextReceived);
+            totalReceived += nextReceived;
+        }
+
+        data += '\0';
         printf("[받은 데이터] %s\n", data.c_str());
+
+        // 후처리
+        switch (type)
+        {
+        case MESSAGE:
+            break;
+        case FILE:
+            // # send 수행시 바이너리 데이터의 시작부분에 파일명.확장자? 형식으로 문자열 삽입
+            // 1. recv 때, data의 앞에서부터 ?가 나올때까지 문자열 읽기. 이후 파일명, 확장자명 확인
+            // 2. ofstream으로 파일 생성
+            break;
+        case DRAWING:
+            // 실시간 그리기 형식이 어떤지 확인해봐야함
+            break;
+        }
+
     }
     return;
 }
