@@ -1,4 +1,4 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #define _WIN32_WINNT 0x0601
 
@@ -74,7 +74,7 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
         if (msg[msg.length() - 1] == '\n')
             msg[msg.length() - 1] = '\0';
 
-        uint8_t type = FILE; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
+        uint8_t type = DRAWING; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
         switch (type)
         {
         case MESSAGE:
@@ -84,7 +84,7 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
             sendFile("D:/Projects/Server/Network-Programming/Client/cat.png"); // 절대경로. 자신에 맞는 파일 위치로 하거나, 실행파일 있는 곳에 파일 두고 상대경로로 사용.
             break;
         case DRAWING:
-            sendDrawing(); // 아직 구현 x 그리기가 어떤 방식인지 알아야됨.
+            sendDrawing({ 1,1 }); // x:1 y:1 좌표로 그렸다고 가정.
             break;
         default:
             break;
@@ -188,12 +188,32 @@ void Client::sendFile(fs::path filePath)
         return;
     }
 
-    std::cout << "File sent successfully: " << filename << std::endl;
+    cout << "File sent successfully: " << filename << endl;
 }
 
-
-void Client::sendDrawing()
+void Client::sendDrawing(POINT mousePos)
 {
+    uint8_t type = DRAWING;
+    string msg = to_string(mousePos.x) + "?" + to_string(mousePos.y); // x?y 양식으로 서버에 전달
+    uint32_t length = strlen(msg.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type; // 타입 설정
+    memcpy(header + 1, &length, sizeof(length));
+
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+    {
+        logError("send(header)", true);
+        return;
+    }
+    
+    if (send(clientSocket, msg.c_str(), strlen(msg.c_str()), 0) == SOCKET_ERROR)
+    {
+        logError("send(Drawing)", true);
+        return; 
+    }
+
+    cout << "Drawing pos sent successfully: " << mousePos.x << " " << mousePos.y << endl;
 }
 
 void Client::logError(const char* msg, bool fatal)
@@ -270,7 +290,7 @@ void Client::receive()
         // 후처리
         if (type == MESSAGE)
         {
-
+            
         }
         else if (type == FILE)
         {
@@ -279,7 +299,7 @@ void Client::receive()
            // 2. ofstream으로 파일 생성
 
             size_t delimiterPos = data.find('?');
-            if (delimiterPos == std::string::npos)
+            if (delimiterPos == string::npos)
                 break;
 
             string outputDirectory = "output/";
@@ -305,8 +325,12 @@ void Client::receive()
         }
         else if (type == DRAWING)
         {
-            // 실시간 그리기 형식이 어떤지 확인해봐야함
+            size_t delimiterPos = data.find('?');
+            string x = data.substr(0, delimiterPos);
+            string y = data.substr(delimiterPos + 1);
+            POINT point = { stoi(x), stoi(y) };
 
+            cout << "Drawing position received! x:" << point.x << " y: " << point.y << endl;
         }
 
     }
