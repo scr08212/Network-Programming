@@ -26,7 +26,7 @@ private:
 
     void sendFile(std::filesystem::path filePath);
 
-    void sendDrawing();
+    void sendDrawing(POINT mousePos);
 
 public:
     Client();
