@@ -74,7 +74,7 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
         if (msg[msg.length() - 1] == '\n')
             msg[msg.length() - 1] = '\0';
 
-        uint8_t type = DRAWING; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
+        uint8_t type = MESSAGE; // 클라이언트 실행 전 테스트할 데이터 타입으로 미리 변경할 것.
         switch (type)
         {
         case MESSAGE:
@@ -285,7 +285,7 @@ void Client::receive()
         }
 
         data += '\0';
-        printf("[받은 데이터] %s\n", data.c_str());
+        printf("[Received Data] %s\n", data.c_str());
 
         // 후처리
         if (type == MESSAGE)
