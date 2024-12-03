@@ -11,11 +11,10 @@
 #include <thread>
 #include <fstream>
 #include <filesystem>
-
-#pragma comment(lib, "ws2_32.lib")
+#include "resource2.h"
+#include <atlconv.h>
 
 using namespace std;
-
 namespace fs = std::filesystem;
 
 #define BUFSIZE 2048
@@ -23,15 +22,16 @@ namespace fs = std::filesystem;
 #define MESSAGE 0X01
 #define FILE 0x02
 #define DRAWING 0X03
+#define CLEARCANVAS 0x04
 
 Client::Client()
-    :serverAddr("127.0.0.1"), serverPort(9000), clientSocket(NULL), isIPv6(false), sockAddrStorage({})
+    :serverAddr("127.0.0.1"), serverPort(9000), clientSocket(NULL), isIPv6(false), isUDP(false), sockAddrStorage({}), stopFlag(true)
 {
-
 }
 
-Client::~Client()
+void Client::setDlgHandle(HWND hwnd)
 {
+    hDlg = hwnd;
 }
 
 void Client::connectToServer(string addr, int port, bool isIPv6)
@@ -51,169 +51,27 @@ void Client::connectToServer(string addr, int port, bool isIPv6)
     if (retval == SOCKET_ERROR)
         logError("connect()", true);
 
-    char* buf = (char*)malloc(sizeof(char) * BUFSIZE);
-    int len;
+    stopFlag = false;
+    recvThread =  thread(&Client::threadReceive, this);
 
-    thread recvThread(&Client::receive, this);
-    while (true)
+    EnableWindow(GetDlgItem(hDlg, IDC_SEND_FILE), TRUE);
+    EnableWindow(GetDlgItem(hDlg, IDC_SEND_MESSAGE), TRUE);
+}
+
+void Client::disconnect()
+{
+    // stop recvthread
+    if (clientSocket != NULL)
     {
-        string msg = "";
-
-        if (fgets(buf, BUFSIZE, stdin)) {
-            msg.append(buf);
-
-            while (strchr(buf, '\n') == NULL && !feof(stdin)) {
-                if (fgets(buf, BUFSIZE, stdin)) {
-                    msg.append(buf);
-                }
-            }
-        }
-
-        if (msg.length() == 0)
-            continue;
-        if (msg[msg.length() - 1] == '\n')
-            msg[msg.length() - 1] = '\0';
-
-        uint8_t type = MESSAGE; // í´ë¼ì´ì–¸íŠ¸ ì‹¤í–‰ ì „ í…ŒìŠ¤íŠ¸í•  ë°ì´í„° íƒ€ì…ìœ¼ë¡œ ë¯¸ë¦¬ ë³€ê²½í•  ê²ƒ.
-        switch (type)
-        {
-        case MESSAGE:
-            sendMessage(msg);
-            break;
-        case FILE:
-            sendFile("D:/Projects/Server/Network-Programming/Client/cat.png"); // ì ˆëŒ€ê²½ë¡œ. ìì‹ ì— ë§ëŠ” íŒŒì¼ ìœ„ì¹˜ë¡œ í•˜ê±°ë‚˜, ì‹¤í–‰íŒŒì¼ ìˆëŠ” ê³³ì— íŒŒì¼ ë‘ê³  ìƒëŒ€ê²½ë¡œë¡œ ì‚¬ìš©.
-            break;
-        case DRAWING:
-            sendDrawing({ 1,1 }); // x:1 y:1 ì¢Œí‘œë¡œ ê·¸ë ¸ë‹¤ê³  ê°€ì •.
-            break;
-        default:
-            break;
-        }
+        shutdown(clientSocket, SD_BOTH); // ¼Û¼ö½Å Áß´Ü
+        closesocket(clientSocket);      // ¼ÒÄÏ ´İ±â
+        clientSocket = NULL;
     }
-    recvThread.join();
 
-    closesocket(clientSocket);
+    stopFlag = true;
+    if (recvThread.joinable())
+        recvThread.join();
     WSACleanup();
-}
-
-sockaddr* Client::getSockAddr()
-{
-    memset(&sockAddrStorage, 0, sizeof(sockAddrStorage));
-
-    if (!isIPv6)
-    {
-        sockaddr_in* addr = (sockaddr_in*)&sockAddrStorage;
-        addr->sin_family = AF_INET;
-        addr->sin_port = htons(serverPort);
-        inet_pton(AF_INET, serverAddr.c_str(), &addr->sin_addr);
-    }
-    else
-    {
-        sockaddr_in6* addr = (sockaddr_in6*)&sockAddrStorage;
-        addr->sin6_family = AF_INET6;
-        addr->sin6_port = htons(serverPort);
-        inet_pton(AF_INET6, serverAddr.c_str(), &addr->sin6_addr);
-    }
-
-    return (sockaddr*)&sockAddrStorage;
-}
-
-void Client::sendMessage(string msg)
-{
-    // í—¤ë”
-    uint8_t type = MESSAGE;
-    uint32_t length = (uint32_t)strlen(msg.c_str());
-
-    char header[HEADERSIZE] = {};
-    header[0] = type;
-    memcpy(header + 1, &length, sizeof(length));
-
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-        logError("send()", true);
-    
-    if (send(clientSocket, msg.c_str(), length, 0) == SOCKET_ERROR)
-        logError("send()", true);
-}
-
-void Client::sendFile(fs::path filePath)
-{
-    uint8_t type = FILE;
-
-    // íŒŒì¼ ì—´ê¸°
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open())
-    {
-        logError("file()", false);
-        return;
-    }
-
-    // íŒŒì¼ í¬ê¸° ê°€ì ¸ì˜¤ê¸°
-    file.seekg(0, std::ios::end);
-    std::streamsize fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    // íŒŒì¼ ë°ì´í„°ë¥¼ ì½ì–´ì„œ ë°”ì´ë„ˆë¦¬ë¡œ ì €ì¥
-    std::vector<char> buffer(fileSize);
-    if (!file.read(buffer.data(), fileSize))
-    {
-        logError("file.read()", false);
-        return;
-    }
-
-    // íŒŒì¼ëª… ì–»ê¸°
-    std::string filename = filePath.filename().string();
-
-    // íŒŒì¼ëª…ê³¼ ë°”ì´ë„ˆë¦¬ ë°ì´í„°ë¥¼ í•©ì¹¨ (íŒŒì¼ëª…?ë°”ì´ë„ˆë¦¬ ë°ì´í„°)
-    std::string data = filename + "?" + std::string(buffer.begin(), buffer.end());
-
-    // ë°ì´í„° ê¸¸ì´ ê³„ì‚°
-    uint32_t length = static_cast<uint32_t>(data.size());
-
-    // í—¤ë” ìƒì„±
-    char header[HEADERSIZE] = {};
-    header[0] = type; // íƒ€ì… ì„¤ì •
-    memcpy(header + 1, &length, sizeof(length));
-
-    // í—¤ë” ì „ì†¡
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-    {
-        logError("send(header)", true);
-        return;
-    }
-
-    // ë°ì´í„° ì „ì†¡
-    if (send(clientSocket, data.c_str(), length, 0) == SOCKET_ERROR)
-    {
-        logError("send(data)", true);
-        return;
-    }
-
-    cout << "File sent successfully: " << filename << endl;
-}
-
-void Client::sendDrawing(POINT mousePos)
-{
-    uint8_t type = DRAWING;
-    string msg = to_string(mousePos.x) + "?" + to_string(mousePos.y); // x?y ì–‘ì‹ìœ¼ë¡œ ì„œë²„ì— ì „ë‹¬
-    uint32_t length = strlen(msg.c_str());
-
-    char header[HEADERSIZE] = {};
-    header[0] = type; // íƒ€ì… ì„¤ì •
-    memcpy(header + 1, &length, sizeof(length));
-
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-    {
-        logError("send(header)", true);
-        return;
-    }
-    
-    if (send(clientSocket, msg.c_str(), strlen(msg.c_str()), 0) == SOCKET_ERROR)
-    {
-        logError("send(Drawing)", true);
-        return; 
-    }
-
-    cout << "Drawing pos sent successfully: " << mousePos.x << " " << mousePos.y << endl;
 }
 
 void Client::logError(const char* msg, bool fatal)
@@ -246,14 +104,18 @@ void Client::initializeSocket()
         logError("socket()", true);
 }
 
-void Client::receive()
+void Client::threadReceive()
 {
-    while (true)
+    // TODO: ÇÁ·Î±×·¥ °­Á¾ÇÒ½Ã threadºÎÅÍ ²¨Áö°Ô. Áö±İ ÄÚµå´Â ÀÛµ¿ ¾ÈÇÏ´Âµí.
+    while (!stopFlag)
     {
         char buf[BUFSIZE] = {};
         int received = recv(clientSocket, buf, BUFSIZE, 0);
+
         if (received <= 0)
         {
+            if (stopFlag)
+                break;
             logError("recv()", true);
             break;
         }
@@ -269,7 +131,7 @@ void Client::receive()
             data = string(buf + HEADERSIZE, received - HEADERSIZE);
         }
 
-        // ì „ì²´ ë°ì´í„°ê°€ ë” ìˆë‹¤ë©´ ë°˜ë³µí•˜ì—¬ ê³„ì† ë°›ê¸°
+        // ÀüÃ¼ µ¥ÀÌÅÍ°¡ ´õ ÀÖ´Ù¸é ¹İº¹ÇÏ¿© °è¼Ó ¹Ş±â
         uint32_t totalReceived = received - HEADERSIZE;
         while (totalReceived < length)
         {
@@ -287,17 +149,15 @@ void Client::receive()
         data += '\0';
         printf("[Received Data] %s\n", data.c_str());
 
-        // í›„ì²˜ë¦¬
+        // ÈÄÃ³¸®
         if (type == MESSAGE)
         {
-            
+            USES_CONVERSION;
+            wstring wstr = wstring(A2W(data.c_str()));
+            SendMessage(GetDlgItem(hDlg, IDC_LIST_RECEIVED), LB_ADDSTRING, 0, (LPARAM)wstr.c_str());
         }
         else if (type == FILE)
         {
-           // # send ìˆ˜í–‰ì‹œ ë°”ì´ë„ˆë¦¬ ë°ì´í„°ì˜ ì‹œì‘ë¶€ë¶„ì— íŒŒì¼ëª….í™•ì¥ì? í˜•ì‹ìœ¼ë¡œ ë¬¸ìì—´ ì‚½ì…
-           // 1. recv ë•Œ, dataì˜ ì•ì—ì„œë¶€í„° ?ê°€ ë‚˜ì˜¬ë•Œê¹Œì§€ ë¬¸ìì—´ ì½ê¸°. ì´í›„ íŒŒì¼ëª…, í™•ì¥ìëª… í™•ì¸
-           // 2. ofstreamìœ¼ë¡œ íŒŒì¼ ìƒì„±
-
             size_t delimiterPos = data.find('?');
             if (delimiterPos == string::npos)
                 break;
@@ -310,7 +170,7 @@ void Client::receive()
             string binaryData = data.substr(delimiterPos + 1);
 
             outputDirectory += fileName;
-            // ê²°ê³¼ ì¶œë ¥
+            // °á°ú Ãâ·Â
             cout << "File Name: " << fileName << endl;
             cout << "Binary Data: " << binaryData << endl;
 
@@ -321,18 +181,178 @@ void Client::receive()
             outputFile.write(binaryData.c_str(), binaryData.size());
             outputFile.close();
 
-            cout << "File saved!" << endl;
+            wstring msg(L"File received");
+            SendMessage(GetDlgItem(hDlg, IDC_LIST_RECEIVED), LB_ADDSTRING, 0, (LPARAM)msg.c_str());
         }
         else if (type == DRAWING)
         {
-            size_t delimiterPos = data.find('?');
-            string x = data.substr(0, delimiterPos);
-            string y = data.substr(delimiterPos + 1);
-            POINT point = { stoi(x), stoi(y) };
+            // color ÃßÃâ
+            size_t colorEnd = data.find('?');
+            COLORREF color = std::stoi(data.substr(0, colorEnd)); // color °ª
 
-            cout << "Drawing position received! x:" << point.x << " y: " << point.y << endl;
+            // from ÁÂÇ¥ ÃßÃâ
+            size_t fromStart = colorEnd + 1;
+            size_t fromSeparator = data.find(':', fromStart);
+            int fromX = std::stoi(data.substr(fromStart, fromSeparator - fromStart));
+            size_t fromEnd = data.find('?', fromSeparator);
+            int fromY = std::stoi(data.substr(fromSeparator + 1, fromEnd - fromSeparator - 1));
+
+            POINT from = { fromX, fromY };
+
+            // to ÁÂÇ¥ ÃßÃâ
+            size_t toStart = fromEnd + 1;
+            size_t toSeparator = data.find(':', toStart);
+            int toX = std::stoi(data.substr(toStart, toSeparator - toStart));
+            int toY = std::stoi(data.substr(toSeparator + 1));
+
+            POINT to = { toX, toY };
+
+            onDrawingReceived(hDlg, color, from, to);
         }
-
+        else if (type == CLEARCANVAS)
+        {
+            onClearCanvasReceived(hDlg);
+        }
     }
+    
     return;
+}
+
+sockaddr* Client::getSockAddr()
+{
+    memset(&sockAddrStorage, 0, sizeof(sockAddrStorage));
+
+    if (!isIPv6)
+    {
+        sockaddr_in* addr = (sockaddr_in*)&sockAddrStorage;
+        addr->sin_family = AF_INET;
+        addr->sin_port = htons(serverPort);
+        inet_pton(AF_INET, serverAddr.c_str(), &addr->sin_addr);
+    }
+    else
+    {
+        sockaddr_in6* addr = (sockaddr_in6*)&sockAddrStorage;
+        addr->sin6_family = AF_INET6;
+        addr->sin6_port = htons(serverPort);
+        inet_pton(AF_INET6, serverAddr.c_str(), &addr->sin6_addr);
+    }
+
+    return (sockaddr*)&sockAddrStorage;
+}
+
+void Client::sendMessage(string msg)    
+{
+    // Çì´õ
+    uint8_t type = MESSAGE;
+    uint32_t length = (uint32_t)strlen(msg.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type;
+    memcpy(header + 1, &length, sizeof(length));
+
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+        logError("send()", true);
+
+    if (send(clientSocket, msg.c_str(), length, 0) == SOCKET_ERROR)
+        logError("send()", true);
+}
+
+void Client::sendFile(filesystem::path filePath)
+{
+    uint8_t type = FILE;
+
+    // ÆÄÀÏ ¿­±â
+    ifstream file(filePath, ios::binary);
+    if (!file.is_open())
+    {
+        logError("file()", false);
+        return;
+    }
+
+    // ÆÄÀÏ Å©±â °¡Á®¿À±â
+    file.seekg(0, ios::end);
+    streamsize fileSize = file.tellg();
+    file.seekg(0, ios::beg);
+
+    // ÆÄÀÏ µ¥ÀÌÅÍ¸¦ ÀĞ¾î¼­ ¹ÙÀÌ³Ê¸®·Î ÀúÀå
+    vector<char> buffer(fileSize);
+    if (!file.read(buffer.data(), fileSize))
+    {
+        logError("file.read()", false);
+        return;
+    }
+
+    // ÆÄÀÏ¸í ¾ò±â
+    string filename = filePath.filename().string();
+
+    // ÆÄÀÏ¸í°ú ¹ÙÀÌ³Ê¸® µ¥ÀÌÅÍ¸¦ ÇÕÄ§ (ÆÄÀÏ¸í?¹ÙÀÌ³Ê¸® µ¥ÀÌÅÍ)
+    string data = filename + "?" + string(buffer.begin(), buffer.end());
+
+    // µ¥ÀÌÅÍ ±æÀÌ °è»ê
+    uint32_t length = static_cast<uint32_t>(data.size());
+
+    // Çì´õ »ı¼º
+    char header[HEADERSIZE] = {};
+    header[0] = type; // Å¸ÀÔ ¼³Á¤
+    memcpy(header + 1, &length, sizeof(length));
+
+    // Çì´õ Àü¼Û
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+    {
+        logError("send(header)", true);
+        return;
+    }
+
+    // µ¥ÀÌÅÍ Àü¼Û
+    if (send(clientSocket, data.c_str(), length, 0) == SOCKET_ERROR)
+    {
+        logError("send(data)", true);
+        return;
+    }
+
+    cout << "File sent successfully: " << filename << endl;
+}
+
+void Client::sendDrawing(COLORREF color, POINT from, POINT to)
+{
+    uint8_t type = DRAWING;
+    
+    string msg = to_string(color) + "?" + to_string(from.x) + ":" + to_string(from.y) + "?" + to_string(to.x) + ":" + to_string(to.y); // color?x:y?x:y ¾ç½ÄÀ¸·Î ¼­¹ö¿¡ Àü´Ş
+    uint32_t length = strlen(msg.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type; // Å¸ÀÔ ¼³Á¤
+    memcpy(header + 1, &length, sizeof(length));
+
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+    {
+        logError("send(header)", true);
+        return;
+    }
+
+    if (send(clientSocket, msg.c_str(), strlen(msg.c_str()), 0) == SOCKET_ERROR)
+    {
+        logError("send(Drawing)", true);
+        return;
+    }
+
+    cout << "Drawing pos sent successfully: " << to.x << " " << to.y << endl;
+}
+
+void Client::sendClearCanvas()
+{
+    // Çì´õ
+    string msg = " ";
+    uint8_t type = CLEARCANVAS;
+    uint32_t length = (uint32_t)strlen(msg.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type;
+    memcpy(header + 1, &length, sizeof(length));
+
+    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
+        logError("send()", true);
+
+    if (send(clientSocket, msg.c_str(), length, 0) == SOCKET_ERROR)
+        logError("send()", true);
 }

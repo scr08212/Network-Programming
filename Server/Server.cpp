@@ -174,8 +174,11 @@ void Server::handleData(uint8_t type, string data)
     case 0x03: // 드로잉
         cout << "Drawing command received" << endl;
         break;
+    case 0x04:
+        cout << "Clear canvas command received" << endl;
+        break;
     default:
-        cout << "Unknown Type: "<< type << endl;
+        cout << "Unknown Type: " << type << endl;
         break;
     }
 }
