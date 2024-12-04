@@ -133,8 +133,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="ServerMain.cpp" />
-    <ClCompile Include="Server.cpp" />
-    <ClCompile Include="Server.h" />
+    <ClCompile Include="TcpServer.cpp" />
+    <ClCompile Include="TcpServer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

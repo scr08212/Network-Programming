@@ -1,78 +1,15 @@
-#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _WIN32_WINNT 0x0601
-
-#pragma once
+ï»¿#pragma once
 #include "Client.h"
-#include <iostream>
-#include <WinSock2.h>
 #include <ws2tcpip.h>
-#include <Windows.h>
-#include <thread>
-#include <fstream>
-#include <filesystem>
-#include "resource2.h"
 #include <atlconv.h>
+#include <fstream>
 
-using namespace std;
-namespace fs = std::filesystem;
-
-#define BUFSIZE 2048
+#define BUFSIZE 512
 #define HEADERSIZE 5
 #define MESSAGE 0X01
 #define FILE 0x02
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
-
-Client::Client()
-    :serverAddr("127.0.0.1"), serverPort(9000), clientSocket(NULL), isIPv6(false), isUDP(false), sockAddrStorage({}), stopFlag(true)
-{
-}
-
-void Client::setDlgHandle(HWND hwnd)
-{
-    hDlg = hwnd;
-}
-
-void Client::connectToServer(string addr, int port, bool isIPv6)
-{
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-        return;
-
-    serverAddr = addr;
-    serverPort = port;
-    this->isIPv6 = isIPv6;
-
-    initializeSocket();
-
-    sockaddr* sockAddr = getSockAddr();
-    int retval = connect(clientSocket, sockAddr, sizeof(addr));
-    if (retval == SOCKET_ERROR)
-        logError("connect()", true);
-
-    stopFlag = false;
-    recvThread =  thread(&Client::threadReceive, this);
-
-    EnableWindow(GetDlgItem(hDlg, IDC_SEND_FILE), TRUE);
-    EnableWindow(GetDlgItem(hDlg, IDC_SEND_MESSAGE), TRUE);
-}
-
-void Client::disconnect()
-{
-    // stop recvthread
-    if (clientSocket != NULL)
-    {
-        shutdown(clientSocket, SD_BOTH); // ¼Û¼ö½Å Áß´Ü
-        closesocket(clientSocket);      // ¼ÒÄÏ ´İ±â
-        clientSocket = NULL;
-    }
-
-    stopFlag = true;
-    if (recvThread.joinable())
-        recvThread.join();
-    WSACleanup();
-}
 
 void Client::logError(const char* msg, bool fatal)
 {
@@ -83,39 +20,31 @@ void Client::logError(const char* msg, bool fatal)
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
         (char*)&lpMsgBuf, 0, NULL);
 
+    auto icon = fatal ? MB_ICONERROR : MB_ICONINFORMATION;
+    MessageBoxA(NULL, (const char*)lpMsgBuf, msg, icon);
+    LocalFree(lpMsgBuf);
     if (fatal)
-    {
-        MessageBoxA(NULL, (const char*)lpMsgBuf, msg, MB_ICONERROR);
-        LocalFree(lpMsgBuf);
-        exit(1);
-    }
-    else
-    {
-        cout << "[" << msg << "] " << (char*)lpMsgBuf << endl;
-        LocalFree(lpMsgBuf);
-    }
+        disconnect();
 }
 
-void Client::initializeSocket()
+void Client::receiveThread()
 {
-    int af = isIPv6 ? AF_INET6 : AF_INET;
-    clientSocket = socket(af, SOCK_STREAM, 0);
-    if (clientSocket == INVALID_SOCKET)
-        logError("socket()", true);
-}
+    sockaddr peerAddr;
+    int addrlen;
 
-void Client::threadReceive()
-{
-    // TODO: ÇÁ·Î±×·¥ °­Á¾ÇÒ½Ã threadºÎÅÍ ²¨Áö°Ô. Áö±İ ÄÚµå´Â ÀÛµ¿ ¾ÈÇÏ´Âµí.
-    while (!stopFlag)
+    while (!_stopFlag)
     {
         char buf[BUFSIZE] = {};
-        int received = recv(clientSocket, buf, BUFSIZE, 0);
+        int received;
+        if (_protocol == Protocol::TCP)
+            received = recv(_clientSocket, buf, BUFSIZE, 0);
+        else
+            received = recvfrom(_clientSocket, buf, BUFSIZE, 0, &peerAddr, &addrlen);
 
+        if (_stopFlag)
+            break;
         if (received <= 0)
         {
-            if (stopFlag)
-                break;
             logError("recv()", true);
             break;
         }
@@ -124,18 +53,22 @@ void Client::threadReceive()
         uint32_t length;
         memcpy(&length, buf + 1, 4);
 
-
         string data;
         if (received > HEADERSIZE)
         {
             data = string(buf + HEADERSIZE, received - HEADERSIZE);
         }
 
-        // ÀüÃ¼ µ¥ÀÌÅÍ°¡ ´õ ÀÖ´Ù¸é ¹İº¹ÇÏ¿© °è¼Ó ¹Ş±â
+        // ì „ì²´ ë°ì´í„°ê°€ ë” ìˆë‹¤ë©´ ë°˜ë³µí•˜ì—¬ ê³„ì† ë°›ê¸°
         uint32_t totalReceived = received - HEADERSIZE;
         while (totalReceived < length)
         {
-            int nextReceived = recv(clientSocket, buf, BUFSIZE, 0);
+            int nextReceived;
+            if (_protocol == Protocol::TCP)
+                nextReceived = recv(_clientSocket, buf, BUFSIZE, 0);
+            else
+                nextReceived = recvfrom(_clientSocket, buf, BUFSIZE, 0, &peerAddr, &addrlen);
+
             if (nextReceived <= 0)
             {
                 logError("recv()", true);
@@ -145,16 +78,14 @@ void Client::threadReceive()
             data.append(buf, nextReceived);
             totalReceived += nextReceived;
         }
-
         data += '\0';
-        printf("[Received Data] %s\n", data.c_str());
 
-        // ÈÄÃ³¸®
+        // í›„ì²˜ë¦¬
         if (type == MESSAGE)
         {
             USES_CONVERSION;
             wstring wstr = wstring(A2W(data.c_str()));
-            SendMessage(GetDlgItem(hDlg, IDC_LIST_RECEIVED), LB_ADDSTRING, 0, (LPARAM)wstr.c_str());
+            onMesssageReceived(hDlg, wstr);
         }
         else if (type == FILE)
         {
@@ -170,9 +101,6 @@ void Client::threadReceive()
             string binaryData = data.substr(delimiterPos + 1);
 
             outputDirectory += fileName;
-            // °á°ú Ãâ·Â
-            cout << "File Name: " << fileName << endl;
-            cout << "Binary Data: " << binaryData << endl;
 
             ofstream outputFile(outputDirectory, ios::binary);
             if (!outputFile.is_open())
@@ -181,16 +109,16 @@ void Client::threadReceive()
             outputFile.write(binaryData.c_str(), binaryData.size());
             outputFile.close();
 
-            wstring msg(L"File received");
-            SendMessage(GetDlgItem(hDlg, IDC_LIST_RECEIVED), LB_ADDSTRING, 0, (LPARAM)msg.c_str());
+            wstring wstr(L"File received");
+            onFileReceived(hDlg, wstr);
         }
         else if (type == DRAWING)
         {
-            // color ÃßÃâ
+            // color ì¶”ì¶œ
             size_t colorEnd = data.find('?');
-            COLORREF color = std::stoi(data.substr(0, colorEnd)); // color °ª
+            COLORREF color = std::stoi(data.substr(0, colorEnd)); // color ê°’
 
-            // from ÁÂÇ¥ ÃßÃâ
+            // from ì¢Œí‘œ ì¶”ì¶œ
             size_t fromStart = colorEnd + 1;
             size_t fromSeparator = data.find(':', fromStart);
             int fromX = std::stoi(data.substr(fromStart, fromSeparator - fromStart));
@@ -199,7 +127,7 @@ void Client::threadReceive()
 
             POINT from = { fromX, fromY };
 
-            // to ÁÂÇ¥ ÃßÃâ
+            // to ì¢Œí‘œ ì¶”ì¶œ
             size_t toStart = fromEnd + 1;
             size_t toSeparator = data.find(':', toStart);
             int toX = std::stoi(data.substr(toStart, toSeparator - toStart));
@@ -211,38 +139,113 @@ void Client::threadReceive()
         }
         else if (type == CLEARCANVAS)
         {
-            onClearCanvasReceived(hDlg);
+            onClearCanvasRequested(hDlg);
         }
     }
-    
-    return;
 }
 
-sockaddr* Client::getSockAddr()
+void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, Protocol protocol)
 {
-    memset(&sockAddrStorage, 0, sizeof(sockAddrStorage));
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+        return;
 
-    if (!isIPv6)
+    _serverInfo.address = serverAddr;
+    _serverInfo.port = port;
+    _ipVersion = ipVersion;
+    _protocol = protocol;
+
+    memset(&addrStorage, 0, sizeof(addrStorage));
+
+    if (_ipVersion == IPVersion::IPv4)
     {
-        sockaddr_in* addr = (sockaddr_in*)&sockAddrStorage;
+        sockaddr_in* addr = (sockaddr_in*)&addrStorage;
         addr->sin_family = AF_INET;
-        addr->sin_port = htons(serverPort);
-        inet_pton(AF_INET, serverAddr.c_str(), &addr->sin_addr);
+        addr->sin_port = htons(_serverInfo.port);
+        inet_pton(AF_INET, _serverInfo.address.c_str(), &addr->sin_addr);
     }
     else
     {
-        sockaddr_in6* addr = (sockaddr_in6*)&sockAddrStorage;
+        sockaddr_in6* addr = (sockaddr_in6*)&addrStorage;
         addr->sin6_family = AF_INET6;
-        addr->sin6_port = htons(serverPort);
-        inet_pton(AF_INET6, serverAddr.c_str(), &addr->sin6_addr);
+        addr->sin6_port = htons(_serverInfo.port);
+        inet_pton(AF_INET6, _serverInfo.address.c_str(), &addr->sin6_addr);
     }
 
-    return (sockaddr*)&sockAddrStorage;
+    auto af = _ipVersion == IPVersion::IPv6 ? AF_INET6 : AF_INET;
+    auto type = _protocol == Protocol::TCP ? SOCK_STREAM : SOCK_DGRAM;
+    _clientSocket = socket(af, type, 0);
+    if (_clientSocket == INVALID_SOCKET)
+    {
+        logError("socket()", true);
+        return;
+    }
+
+    if (_protocol == Protocol::TCP)
+    {
+        int retval = connect(_clientSocket, getServerSockAddr(), sizeof(serverAddr));
+        if (retval == SOCKET_ERROR)
+        {
+            logError("connect()", true);
+            return;
+        }
+    }
+
+    _stopFlag = false;
+    _recvThread = thread(&Client::receiveThread, this);
+
+    onConnected(hDlg);
 }
 
-void Client::sendMessage(string msg)    
+void Client::disconnect()
 {
-    // Çì´õ
+    if (_clientSocket != NULL)
+    {
+        shutdown(_clientSocket, SD_BOTH); // ì†¡ìˆ˜ì‹  ì¤‘ë‹¨
+        closesocket(_clientSocket);      // ì†Œì¼“ ë‹«ê¸°
+        _clientSocket = NULL;
+    }
+
+    _stopFlag = true;
+    if (_recvThread.joinable())
+        _recvThread.join();
+
+    WSACleanup();
+    onDisconnected(hDlg);
+}
+
+void Client::sendData(string header, string data)
+{
+    if (_protocol == Protocol::TCP)
+    {
+        if (send(_clientSocket, header.c_str(), HEADERSIZE, 0) == SOCKET_ERROR)
+        {
+            logError("send()", true);
+            return;
+        }
+
+        if (send(_clientSocket, data.c_str(), strlen(data.c_str()), 0) == SOCKET_ERROR)
+        {
+            logError("send()", true);
+            return;
+        }
+    }
+    else
+    {
+        string str(header, HEADERSIZE);
+        str += data;
+        auto serveraddr = getServerSockAddr();
+        if (sendto(_clientSocket, str.c_str(), strlen(str.c_str()), 0, serveraddr, sizeof(serveraddr)) == SOCKET_ERROR)
+        {
+            logError("send()", true);
+            return;
+        }
+    }
+}
+
+void Client::sendMessage(string msg)
+{
+    // í—¤ë”
     uint8_t type = MESSAGE;
     uint32_t length = (uint32_t)strlen(msg.c_str());
 
@@ -250,18 +253,14 @@ void Client::sendMessage(string msg)
     header[0] = type;
     memcpy(header + 1, &length, sizeof(length));
 
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-        logError("send()", true);
-
-    if (send(clientSocket, msg.c_str(), length, 0) == SOCKET_ERROR)
-        logError("send()", true);
+    sendData(string(header), msg);
 }
 
 void Client::sendFile(filesystem::path filePath)
 {
     uint8_t type = FILE;
 
-    // ÆÄÀÏ ¿­±â
+    // íŒŒì¼ ì—´ê¸°
     ifstream file(filePath, ios::binary);
     if (!file.is_open())
     {
@@ -269,12 +268,12 @@ void Client::sendFile(filesystem::path filePath)
         return;
     }
 
-    // ÆÄÀÏ Å©±â °¡Á®¿À±â
+    // íŒŒì¼ í¬ê¸° ê°€ì ¸ì˜¤ê¸°
     file.seekg(0, ios::end);
     streamsize fileSize = file.tellg();
     file.seekg(0, ios::beg);
 
-    // ÆÄÀÏ µ¥ÀÌÅÍ¸¦ ÀĞ¾î¼­ ¹ÙÀÌ³Ê¸®·Î ÀúÀå
+    // íŒŒì¼ ë°ì´í„°ë¥¼ ì½ì–´ì„œ ë°”ì´ë„ˆë¦¬ë¡œ ì €ì¥
     vector<char> buffer(fileSize);
     if (!file.read(buffer.data(), fileSize))
     {
@@ -282,77 +281,61 @@ void Client::sendFile(filesystem::path filePath)
         return;
     }
 
-    // ÆÄÀÏ¸í ¾ò±â
+    // íŒŒì¼ëª… ì–»ê¸°
     string filename = filePath.filename().string();
 
-    // ÆÄÀÏ¸í°ú ¹ÙÀÌ³Ê¸® µ¥ÀÌÅÍ¸¦ ÇÕÄ§ (ÆÄÀÏ¸í?¹ÙÀÌ³Ê¸® µ¥ÀÌÅÍ)
+    // íŒŒì¼ëª…ê³¼ ë°”ì´ë„ˆë¦¬ ë°ì´í„°ë¥¼ í•©ì¹¨ (íŒŒì¼ëª…?ë°”ì´ë„ˆë¦¬ ë°ì´í„°)
     string data = filename + "?" + string(buffer.begin(), buffer.end());
 
-    // µ¥ÀÌÅÍ ±æÀÌ °è»ê
+    // ë°ì´í„° ê¸¸ì´ ê³„ì‚°
     uint32_t length = static_cast<uint32_t>(data.size());
 
-    // Çì´õ »ı¼º
+    // í—¤ë” ìƒì„±
     char header[HEADERSIZE] = {};
-    header[0] = type; // Å¸ÀÔ ¼³Á¤
+    header[0] = type;
     memcpy(header + 1, &length, sizeof(length));
 
-    // Çì´õ Àü¼Û
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-    {
-        logError("send(header)", true);
-        return;
-    }
-
-    // µ¥ÀÌÅÍ Àü¼Û
-    if (send(clientSocket, data.c_str(), length, 0) == SOCKET_ERROR)
-    {
-        logError("send(data)", true);
-        return;
-    }
-
-    cout << "File sent successfully: " << filename << endl;
+    sendData(string(header), data);
 }
 
 void Client::sendDrawing(COLORREF color, POINT from, POINT to)
 {
     uint8_t type = DRAWING;
-    
-    string msg = to_string(color) + "?" + to_string(from.x) + ":" + to_string(from.y) + "?" + to_string(to.x) + ":" + to_string(to.y); // color?x:y?x:y ¾ç½ÄÀ¸·Î ¼­¹ö¿¡ Àü´Ş
-    uint32_t length = strlen(msg.c_str());
 
-    char header[HEADERSIZE] = {};
-    header[0] = type; // Å¸ÀÔ ¼³Á¤
-    memcpy(header + 1, &length, sizeof(length));
-
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-    {
-        logError("send(header)", true);
-        return;
-    }
-
-    if (send(clientSocket, msg.c_str(), strlen(msg.c_str()), 0) == SOCKET_ERROR)
-    {
-        logError("send(Drawing)", true);
-        return;
-    }
-
-    cout << "Drawing pos sent successfully: " << to.x << " " << to.y << endl;
-}
-
-void Client::sendClearCanvas()
-{
-    // Çì´õ
-    string msg = " ";
-    uint8_t type = CLEARCANVAS;
-    uint32_t length = (uint32_t)strlen(msg.c_str());
+    string data = to_string(color) + "?" + to_string(from.x) + ":" + to_string(from.y) + "?" + to_string(to.x) + ":" + to_string(to.y); // color?x:y?x:y ì–‘ì‹ìœ¼ë¡œ ì„œë²„ì— ì „ë‹¬
+    uint32_t length = strlen(data.c_str());
 
     char header[HEADERSIZE] = {};
     header[0] = type;
     memcpy(header + 1, &length, sizeof(length));
 
-    if (send(clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
-        logError("send()", true);
+    sendData(string(header), data);
+}
 
-    if (send(clientSocket, msg.c_str(), length, 0) == SOCKET_ERROR)
-        logError("send()", true);
+void Client::sendClearCanvas()
+{
+    string data = " ";
+    uint8_t type = CLEARCANVAS;
+    uint32_t length = (uint32_t)strlen(data.c_str());
+
+    char header[HEADERSIZE] = {};
+    header[0] = type;
+    memcpy(header + 1, &length, sizeof(length));
+
+    sendData(string(header), data);
+}
+
+void Client::setHDlg(HWND hDlg)
+{
+    this->hDlg = hDlg;
+}
+
+bool Client::getStopFlag()
+{
+    return _stopFlag;
+}
+
+sockaddr* Client::getServerSockAddr()
+{
+    return (sockaddr*)&addrStorage;
 }

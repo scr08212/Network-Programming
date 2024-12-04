@@ -3,7 +3,7 @@
 #define _WIN32_WINNT 0x0601
 
 #pragma once
-#include "Server.h"
+#include "TcpServer.h"
 #include <iostream>
 #include <stdlib.h>
 #include <string.h>
@@ -16,18 +16,23 @@
 
 using namespace std;
 
-Server::Server(int server_port)
+#define MESSAGE 0X01
+#define FILE 0x02
+#define DRAWING 0X03
+#define CLEARCANVAS 0x04
+
+TcpServer::TcpServer(int server_port)
     :port(server_port)
 {
     serverSocket = NULL;
     clients = {};
 }
 
-Server::~Server()
+TcpServer::~TcpServer()
 {
 }
 
-void Server::logError(const char* msg, bool fatal)
+void TcpServer::logError(const char* msg, bool fatal)
 {
     LPVOID lpMsgBuf = nullptr;
     FormatMessageA(
@@ -49,7 +54,7 @@ void Server::logError(const char* msg, bool fatal)
     }
 }
 
-void Server::initializeSocket()
+void TcpServer::initializeSocket()
 {
     serverSocket = socket(AF_INET6, SOCK_STREAM, 0);
     if (serverSocket == INVALID_SOCKET)
@@ -71,7 +76,7 @@ void Server::initializeSocket()
         logError("listen()", true);
 }
 
-void Server::start()
+void TcpServer::start()
 {
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
@@ -88,7 +93,7 @@ void Server::start()
     return;
 }
 
-void Server::acceptClients()
+void TcpServer::acceptClients()
 {
     while (true)
     {
@@ -104,13 +109,13 @@ void Server::acceptClients()
         ClientInfo info = getClientInfo(client_addr);
         printf("\n[TCP/%s 서버] 클라이언트 접속: IP 주소= %s, 포트 번호 = %d\n", (info.isIPv4 ? "IPv4" : "IPv6"), info.address.c_str(), info.port);
         clients.push_back(client_sock);
-        std::thread(&Server::handleClient, this, client_sock, client_addr).detach();
+        std::thread(&TcpServer::handleClient, this, client_sock, client_addr).detach();
     }
 
     return;
 }
 
-void Server::handleClient(SOCKET client, sockaddr_in6 sock_addr)
+void TcpServer::handleClient(SOCKET client, sockaddr_in6 sock_addr)
 {
     while (true)
     {
@@ -139,7 +144,7 @@ void Server::handleClient(SOCKET client, sockaddr_in6 sock_addr)
         string msg(header, 5);
         msg += data;
 
-        broadCast(client, msg.c_str(), 5 + length, true);
+        sendAll(client, msg.c_str(), 5 + length, true);
     }
 
     clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
@@ -150,7 +155,7 @@ void Server::handleClient(SOCKET client, sockaddr_in6 sock_addr)
     return;
 }
 
-void Server::broadCast(SOCKET from, const char* buf, int len, bool loop_back)
+void TcpServer::sendAll(SOCKET from, const char* buf, int len, bool loop_back)
 {
     int retval;
     for (SOCKET client : clients)
@@ -161,20 +166,20 @@ void Server::broadCast(SOCKET from, const char* buf, int len, bool loop_back)
     }
 }
 
-void Server::handleData(uint8_t type, string data)
+void TcpServer::handleData(uint8_t type, string data)
 {
     switch (type)
     {
-    case 0x01: // 메시지
+    case MESSAGE:
         cout << "message received: " << data << endl;
         break;
-    case 0x02: // 파일
+    case FILE:
         cout << "File received" << endl;
         break;
-    case 0x03: // 드로잉
+    case DRAWING:
         cout << "Drawing command received" << endl;
         break;
-    case 0x04:
+    case CLEARCANVAS:
         cout << "Clear canvas command received" << endl;
         break;
     default:
@@ -183,7 +188,7 @@ void Server::handleData(uint8_t type, string data)
     }
 }
 
-Server::ClientInfo Server::getClientInfo(sockaddr_in6 sockAddr)
+TcpServer::ClientInfo TcpServer::getClientInfo(sockaddr_in6 sockAddr)
 {
     ClientInfo info{};
 

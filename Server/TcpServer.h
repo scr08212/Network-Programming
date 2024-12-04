@@ -6,7 +6,7 @@
 
 using namespace std;
 
-class Server
+class TcpServer
 {
     struct ClientInfo {
         bool isIPv4;
@@ -26,7 +26,7 @@ private:
 
     void acceptClients();
 
-    void broadCast(SOCKET from, const char* buf, int len, bool loopBack);
+    void sendAll(SOCKET from, const char* buf, int len, bool loopBack);
 
     void handleClient(SOCKET client, sockaddr_in6 sock_addr);
 
@@ -35,9 +35,9 @@ private:
     ClientInfo getClientInfo(sockaddr_in6 sockAddr);
 
 public:
-    Server(int serverPort);
+    TcpServer(int serverPort);
 
-    ~Server();
+    ~TcpServer();
 
     void start();
 };

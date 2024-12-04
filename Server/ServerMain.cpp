@@ -1,17 +1,11 @@
-#include "Server.h"
+#include "TcpServer.h"
 
 int main(int argc, char* argv[])
 {
-    //TODO: 
-    // [v]: dual stack으로 IPv4, IPv6 동시 처리
-    // [v]: 멀티쓰레드로 TCP연결
-    // [v]: 접속중인 클라이언트에 받은 메시지 보내기 
-    // [ ]: 이미지/텍스트파일 처리
-    // [ ]: 실시간 드로잉 처리
-    // [v]: IPv4 감지 후 주소 출력시 IPv4 부분만 출력되게 처리
-
-    Server server(9000);
-    server.start();
+    // TODO:
+    // UDP 병합
+    TcpServer tcpServer(9000);
+    tcpServer.start();
 
 
     return 0;

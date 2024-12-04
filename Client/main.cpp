@@ -1,4 +1,4 @@
-#define _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS 
+Ôªø#define _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS 
 #define _CRT_SECURE_NO_WARNINGS
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #define _WIN32_WINNT 0X0601
@@ -13,7 +13,6 @@
 
 #pragma comment(lib, "ws2_32")
 
-
 Client client;
 COLORREF color;
 POINT prevPoint;
@@ -22,8 +21,7 @@ bool isCanvasInitialized;
 string getStringFromEditText(HWND hDlg, int id)
 {
     string text = "";
-    // UTF-16 πÆ¿⁄ø≠¿ª πﬁ¿ª √Ê∫–«— ≈©±‚¿« πˆ∆€ º±æ
-    wchar_t addrW[1024] = { 0 }; // √÷¥Î 512∞≥¿« UTF-16 πÆ¿⁄∏¶ πﬁ¿ª ºˆ ¿÷¿Ω.
+    wchar_t addrW[1024] = { 0 };
     GetDlgItemTextW(hDlg, id, addrW, sizeof(addrW) / sizeof(wchar_t));
     wstring wstr = wstring(addrW);
 
@@ -38,16 +36,17 @@ void clearCanvas(HWND hDlg)
     HWND hCanvas = GetDlgItem(hDlg, IDC_CANVAS);
     HDC hdc = GetDC(hCanvas);
 
-    // ƒµπˆΩ∫ øµø™ ∞°¡Æø¿±‚
+    // Ï∫îÎ≤ÑÏä§ ÏòÅÏó≠ Í∞ÄÏ†∏Ïò§Í∏∞
     RECT rect;
     GetClientRect(hCanvas, &rect);
 
+    // ÌÖåÎëêÎ¶¨ 1px
     rect.top += 1;
     rect.bottom -= 1;
     rect.left += 1;
     rect.right -= 1;
 
-    // »Úªˆ¿∏∑Œ ƒµπˆΩ∫∏¶ √§øÚ
+    // Ìù∞ÏÉâÏúºÎ°ú Ï∫îÎ≤ÑÏä§Î•º Ï±ÑÏõÄ
     HBRUSH hBrush = CreateSolidBrush(RGB(255, 255, 255));
     FillRect(hdc, &rect, hBrush);
 
@@ -55,31 +54,48 @@ void clearCanvas(HWND hDlg)
     ReleaseDC(hCanvas, hdc);
 }
 
-// DlgProcø°º≠ WM_COMMAND ∫Œ∫–∏∏ µ˚∑Œ ª≠
+void DrawLine(HDC hdc, COLORREF colorRef, POINT from, POINT to)
+{
+    HPEN hPen = CreatePen(PS_SOLID, 1, colorRef);
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+    MoveToEx(hdc, from.x, from.y, NULL);
+    LineTo(hdc, to.x, to.y);
+
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hPen);
+}
+
+// DlgProcÏóêÏÑú WM_COMMAND Î∂ÄÎ∂ÑÎßå Îî∞Î°ú Î∫å
 INT_PTR CommandProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    bool isIPv6 = false;
-    string msg;
-
     switch (LOWORD(wParam))
     {
     case IDC_CONNECT:
-        isIPv6 = IsDlgButtonChecked(hDlg, IDC_RADIO_IPV6);
-        client.setDlgHandle(hDlg);
-        client.connectToServer(getStringFromEditText(hDlg, IDC_EDIT_ADDRESS), 9000, isIPv6);
-        
+    {
+        bool isIPv6 = IsDlgButtonChecked(hDlg, IDC_RADIO_IPV6);
+        bool isUDP = IsDlgButtonChecked(hDlg, IDC_RADIO_UDP);
+        IPVersion ipVersion = isIPv6 ? IPVersion::IPv6 : IPVersion::IPv4;
+        string addr = getStringFromEditText(hDlg, IDC_EDIT_ADDRESS);
+        int port = stoi(getStringFromEditText(hDlg, IDC_EDIT_PORT));
+        Protocol protocol = isUDP ? Protocol::UDP : Protocol::TCP;
+
+        client.connectToServer(addr, port, ipVersion, protocol);
         return TRUE;
+    }
     case IDC_SEND_MESSAGE:
-        msg = getStringFromEditText(hDlg, IDC_EDIT_MESSAGE);
+    {
+        string msg = getStringFromEditText(hDlg, IDC_EDIT_MESSAGE);
         if (msg == "")
             return TRUE;
         client.sendMessage(msg);
         SetDlgItemText(hDlg, IDC_EDIT_MESSAGE, L"");
         return TRUE;
+    }
     case IDC_SEND_FILE:
     {
-        msg = getStringFromEditText(hDlg, IDC_EDIT_MESSAGE); // read file path
-        client.sendFile(msg);
+        string path = getStringFromEditText(hDlg, IDC_EDIT_MESSAGE);
+        client.sendFile(path);
         return TRUE;
     }
     case IDC_RADIO_IPV6:
@@ -113,7 +129,7 @@ INT_PTR CommandProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         CheckDlgButton(hDlg, IDC_COLOR_BLUE, BST_CHECKED);
         return TRUE;
     case IDC_CLEAR_CANVAS:
-        if (!client.stopFlag)
+        if (!client.getStopFlag())
         {
             clearCanvas(hDlg);
             client.sendClearCanvas();
@@ -128,33 +144,39 @@ INT_PTR CommandProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
     return FALSE;
 }
 
-void DrawLine(HDC hdc, COLORREF colorRef, POINT from, POINT to)
-{
-    HPEN hPen = CreatePen(PS_SOLID, 1, colorRef);
-    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen); 
-
-    MoveToEx(hdc, from.x, from.y, NULL);
-    LineTo(hdc, to.x, to.y);
-
-    SelectObject(hdc, hOldPen);
-    DeleteObject(hPen);
-}
-
 INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    HWND hCanvas = GetDlgItem(hDlg, IDC_CANVAS);
     RECT rect;
     POINT curPoint;
 
     switch (uMsg)
     {
     case WM_INITDIALOG:
-        color = RGB(255, 0, 0);  // ±‚∫ª ∆Ê ªˆ: ª°∞£ªˆ
+        client.setHDlg(hDlg);
+        color = RGB(255, 0, 0);  // Í∏∞Î≥∏ Ìéú ÏÉâ: Îπ®Í∞ÑÏÉâ
         CheckDlgButton(hDlg, IDC_COLOR_RED, BST_CHECKED);
         EnableWindow(GetDlgItem(hDlg, IDC_SEND_FILE), FALSE);
         EnableWindow(GetDlgItem(hDlg, IDC_SEND_MESSAGE), FALSE);
 
-        // ¿Ã∫•∆Æ ƒ›πÈ º≥¡§
+        // Ïù¥Î≤§Ìä∏ ÏΩúÎ∞± ÏÑ§Ï†ï
+        client.onConnected = [](HWND hDlg)
+            {
+                EnableWindow(GetDlgItem(hDlg, IDC_SEND_FILE), TRUE);
+                EnableWindow(GetDlgItem(hDlg, IDC_SEND_MESSAGE), TRUE);
+            };
+        client.onDisconnected = [](HWND hDlg)
+            {
+                EnableWindow(GetDlgItem(hDlg, IDC_SEND_FILE), FALSE);
+                EnableWindow(GetDlgItem(hDlg, IDC_SEND_MESSAGE), FALSE);
+            };
+        client.onMesssageReceived = [](HWND hDlg, wstring msg)
+            {
+                SendMessage(GetDlgItem(hDlg, IDC_LIST_RECEIVED), LB_ADDSTRING, 0, (LPARAM)msg.c_str());
+            };
+        client.onFileReceived = [](HWND hDlg, wstring msg)
+            {
+                SendMessage(GetDlgItem(hDlg, IDC_LIST_RECEIVED), LB_ADDSTRING, 0, (LPARAM)msg.c_str());
+            };
         client.onDrawingReceived = [](HWND hDlg, COLORREF colorRef, POINT from, POINT to)
             {
                 HWND hCanvas = GetDlgItem(hDlg, IDC_CANVAS);
@@ -162,7 +184,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 DrawLine(hdc, colorRef, from, to);
                 ReleaseDC(hCanvas, hdc);
             };
-        client.onClearCanvasReceived = [](HWND hDlg)
+        client.onClearCanvasRequested = [](HWND hDlg)
             {
                 clearCanvas(hDlg);
             };
@@ -180,8 +202,10 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return CommandProc(hDlg, uMsg, wParam, lParam);
 
     case WM_MOUSEMOVE:
-        if (client.stopFlag)
+        if (client.getStopFlag())
             break;
+
+        HWND hCanvas = GetDlgItem(hDlg, IDC_CANVAS);
         GetCursorPos(&curPoint);
         GetClientRect(hCanvas, &rect);
         ScreenToClient(hCanvas, &curPoint);
