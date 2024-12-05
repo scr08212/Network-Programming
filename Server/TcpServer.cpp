@@ -1,213 +1,156 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _WIN32_WINNT 0x0601
+﻿    #define _CRT_SECURE_NO_WARNINGS
+    #define _WINSOCK_DEPRECATED_NO_WARNINGS
+    #define _WIN32_WINNT 0x0601
 
-#pragma once
-#include "TcpServer.h"
-#include <iostream>
-#include <stdlib.h>
-#include <string.h>
-#include <WinSock2.h>
-#include <ws2tcpip.h>
-#include <Windows.h>
-#include <thread>
+    #pragma once
+    #include "TCPServer.h"
+    #include <ws2tcpip.h>
+    #include <iostream>
+    #include <thread>
 
-#pragma comment(lib, "ws2_32.lib")
+    #pragma comment(lib, "ws2_32")
 
-using namespace std;
+    #define HEADERSIZE 5
+    #define MESSAGE 0X01
+    #define FILE 0x02
+    #define DRAWING 0X03
+    #define CLEARCANVAS 0x04
 
-#define MESSAGE 0X01
-#define FILE 0x02
-#define DRAWING 0X03
-#define CLEARCANVAS 0x04
+    using namespace std;
 
-TcpServer::TcpServer(int server_port)
-    :port(server_port)
-{
-    serverSocket = NULL;
-    clients = {};
-}
-
-TcpServer::~TcpServer()
-{
-}
-
-void TcpServer::logError(const char* msg, bool fatal)
-{
-    LPVOID lpMsgBuf = nullptr;
-    FormatMessageA(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-        NULL, WSAGetLastError(),
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (char*)&lpMsgBuf, 0, NULL);
-
-    if (fatal)
+    void TCPServer::run(int port)
     {
-        MessageBoxA(NULL, (const char*)lpMsgBuf, msg, MB_ICONERROR);
-        LocalFree(lpMsgBuf);
-        exit(1);
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+            return;
+
+        _sock = socket(AF_INET6, SOCK_STREAM, 0);
+        if (_sock == INVALID_SOCKET)
+            logError("socket()", true);
+
+        // Dual socket 사용
+        DWORD optval = 0;
+        if (setsockopt(_sock, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&optval, sizeof(optval)) == SOCKET_ERROR)
+            logError("setsockopt()", true);
+
+        sockaddr_in6 serverAddr = {};
+        serverAddr.sin6_family = AF_INET6;
+        serverAddr.sin6_addr = in6addr_any;
+        serverAddr.sin6_port = htons(port);
+
+        if (bind(_sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
+            logError("bind()", true);
+
+        if (listen(_sock, SOMAXCONN) == SOCKET_ERROR)
+            logError("listen()", true);
+
+        printf("TCP server is running on port %d\n", port);
+        acceptClient();
+        stop();
     }
-    else
+
+    void TCPServer::acceptClient()
     {
-        cout << "[" << msg << "] " << (char*)lpMsgBuf << endl;
-        LocalFree(lpMsgBuf);
-    }
-}
-
-void TcpServer::initializeSocket()
-{
-    serverSocket = socket(AF_INET6, SOCK_STREAM, 0);
-    if (serverSocket == INVALID_SOCKET)
-        logError("socket()", true);
-
-    int optval = 0;
-    if (setsockopt(serverSocket, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&optval, sizeof(optval)) == SOCKET_ERROR)
-        logError("setsockopt()", true);
-
-    sockaddr_in6 server_addr = {};
-    server_addr.sin6_family = AF_INET6;
-    server_addr.sin6_addr = in6addr_any;
-    server_addr.sin6_port = htons(port);
-
-    if (bind(serverSocket, (SOCKADDR*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR)
-        logError("bind()", true);
-
-    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR)
-        logError("listen()", true);
-}
-
-void TcpServer::start()
-{
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
-        return;
-
-    initializeSocket();
-    cout << "Server is running on port " << port << endl;
-
-    acceptClients();
-
-    closesocket(serverSocket);
-    WSACleanup();
-
-    return;
-}
-
-void TcpServer::acceptClients()
-{
-    while (true)
-    {
-        struct sockaddr_in6 client_addr = {};
-        int addrlen = sizeof(client_addr);
-        SOCKET client_sock = accept(serverSocket, (sockaddr*)&client_addr, &addrlen);
-
-        if (client_sock == INVALID_SOCKET)
+        while (true)
         {
-            logError("accept()");
-            break;
+            struct sockaddr_in6 clientAddr = {};
+            int addrlen = sizeof(clientAddr);
+            SOCKET clientSock = accept(_sock, (sockaddr*)&clientAddr, &addrlen);
+            if (clientSock == INVALID_SOCKET)
+            {
+                logError("accept()");
+                continue;
+            }
+
+            ClientInfo clientInfo;
+            char addr[INET6_ADDRSTRLEN];
+            sockaddr_in6* s = (sockaddr_in6*)&clientAddr;
+            if (IN6_IS_ADDR_V4MAPPED(&s->sin6_addr))
+            {
+                struct in_addr ipv4Addr;
+                memcpy(&ipv4Addr, &s->sin6_addr.s6_addr[12], sizeof(ipv4Addr));
+                inet_ntop(AF_INET, &ipv4Addr, addr, sizeof(addr));
+                clientInfo.ipVersion = IPVersion::IPv4;
+            }
+            else
+            {
+                inet_ntop(AF_INET6, &s->sin6_addr, addr, sizeof(addr));
+                clientInfo.ipVersion = IPVersion::IPv6;
+            }
+            clientInfo.socket = clientSock;
+            clientInfo.address = addr; 
+            clientInfo.port = ntohs(clientAddr.sin6_port);
+
+            clients.push_back(clientInfo);
+            printf("\n[TCP/%s] 클라이언트 접속: IP 주소= %s, 포트 번호 = %d\n", (clientInfo.ipVersion == IPVersion::IPv4 ? "IPv4" : "IPv6"), clientInfo.address.c_str(), clientInfo.port);
+            thread(&TCPServer::receiveThread, this, clientInfo).detach();
         }
-        ClientInfo info = getClientInfo(client_addr);
-        printf("\n[TCP/%s 서버] 클라이언트 접속: IP 주소= %s, 포트 번호 = %d\n", (info.isIPv4 ? "IPv4" : "IPv6"), info.address.c_str(), info.port);
-        clients.push_back(client_sock);
-        std::thread(&TcpServer::handleClient, this, client_sock, client_addr).detach();
     }
 
-    return;
-}
-
-void TcpServer::handleClient(SOCKET client, sockaddr_in6 sock_addr)
-{
-    while (true)
+    void TCPServer::receiveThread(ClientInfo clientInfo)
     {
-        char header[5]; // 0: type 1~4: dataSize
-        int received = recv(client, header, 5, 0);
-        if (received <= 0)
+        SOCKET clientSock = clientInfo.socket;
+        while (true)
         {
-            logError("recv()");
-            break;
+            char header[HEADERSIZE]; // 0: type 1-4: dataSize
+            if (recv(clientSock, header, HEADERSIZE, 0) <= 0)
+            {
+                logError("recv()");
+                break;
+            }
+
+            uint8_t type = header[0];
+            uint32_t length;
+            memcpy(&length, header + 1, HEADERSIZE - 1);
+
+            string data(length, '\0');
+            if (recv(clientSock, &data[0], length, 0) <= 0)
+            {
+                logError("recv()");
+                break;
+            }
+
+            string msg(header, HEADERSIZE);
+            msg += data;
+
+            bool loopback = false;
+            switch (type)
+            {
+            case MESSAGE:
+                printf("message received: %s\n", data.c_str());
+                loopback = true;
+                break;
+            case FILE:
+                printf("File received\n");
+                loopback = false;
+                break;
+            case DRAWING:
+                printf("Drawing command received\n");
+                break;
+            case CLEARCANVAS:
+                printf("Clear canvas command received\n");
+                break;
+            default:
+                printf("Unknown Type: %d\n", type);
+                break;
+            }
+
+            broadCast(clientSock, msg.c_str(), HEADERSIZE + length, loopback);
         }
 
-        uint8_t type = header[0];
-        uint32_t length;
-        memcpy(&length, header + 1, 4);
+        clients.erase(remove(clients.begin(), clients.end(), clientInfo), clients.end());
+        printf("\n[TCP/%s] 클라이언트 종료: IP 주소= %s, 포트 번호 = %d\n", (clientInfo.ipVersion == IPVersion::IPv4 ? "IPv4" : "IPv6"), clientInfo.address.c_str(), clientInfo.port);
+        closesocket(clientSock);
+    }
 
-        string data(length, '\0');
-        received = recv(client, &data[0], length, 0);
-        if (received <= 0)
+    void TCPServer::broadCast(SOCKET from, const char* buf, int len, bool loop_back)
+    {
+        for (auto& clientInfo : clients)
         {
-            logError("recv()");
-            break;
+            SOCKET client = clientInfo.socket;
+            if (!loop_back && client == from)
+                continue;
+            if (send(client, buf, len, 0) == SOCKET_ERROR)
+                logError("send()");
         }
-
-        handleData(type, data);
-
-        string msg(header, 5);
-        msg += data;
-
-        sendAll(client, msg.c_str(), 5 + length, true);
     }
-
-    clients.erase(std::remove(clients.begin(), clients.end(), client), clients.end());
-
-    ClientInfo info = getClientInfo(sock_addr);
-    printf("\n[TCP/%s 서버] 클라이언트 종료: IP 주소= %s, 포트 번호 = %d\n", (info.isIPv4 ? "IPv4" : "IPv6"), info.address.c_str(), info.port);
-    closesocket(client);
-    return;
-}
-
-void TcpServer::sendAll(SOCKET from, const char* buf, int len, bool loop_back)
-{
-    int retval;
-    for (SOCKET client : clients)
-    {
-        if (!loop_back && client == from)
-            continue;
-        retval = send(client, buf, len, 0);
-    }
-}
-
-void TcpServer::handleData(uint8_t type, string data)
-{
-    switch (type)
-    {
-    case MESSAGE:
-        cout << "message received: " << data << endl;
-        break;
-    case FILE:
-        cout << "File received" << endl;
-        break;
-    case DRAWING:
-        cout << "Drawing command received" << endl;
-        break;
-    case CLEARCANVAS:
-        cout << "Clear canvas command received" << endl;
-        break;
-    default:
-        cout << "Unknown Type: " << type << endl;
-        break;
-    }
-}
-
-TcpServer::ClientInfo TcpServer::getClientInfo(sockaddr_in6 sockAddr)
-{
-    ClientInfo info{};
-
-    char addr[INET6_ADDRSTRLEN];
-    sockaddr_in6* s = (sockaddr_in6*)&sockAddr;
-    if (IN6_IS_ADDR_V4MAPPED(&s->sin6_addr))
-    {
-        struct in_addr ipv4_addr;
-        memcpy(&ipv4_addr, &s->sin6_addr.s6_addr[12], sizeof(ipv4_addr));
-        inet_ntop(AF_INET, &ipv4_addr, addr, sizeof(addr));
-        info.isIPv4 = true;
-    }
-    else
-    {
-        inet_ntop(AF_INET6, &s->sin6_addr, addr, sizeof(addr));
-        info.isIPv4 = false;
-    }
-
-    info.address = addr;  // std::string에 직접 할당
-    info.port = ntohs(sockAddr.sin6_port);
-    return info;
-}

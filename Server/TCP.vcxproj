@@ -18,6 +18,17 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="BaseServer.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="TCPServer.cpp" />
+    <ClCompile Include="UDPServer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="BaseServer.h" />
+    <ClInclude Include="TCPServer.h" />
+    <ClInclude Include="UDPServer.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -131,11 +142,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="ServerMain.cpp" />
-    <ClCompile Include="TcpServer.cpp" />
-    <ClCompile Include="TcpServer.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

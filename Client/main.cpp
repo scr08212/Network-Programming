@@ -161,6 +161,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         // 이벤트 콜백 설정
         client.onConnected = [](HWND hDlg)
             {
+                EnableWindow(GetDlgItem(hDlg, IDC_CONNECT), FALSE);
                 EnableWindow(GetDlgItem(hDlg, IDC_SEND_FILE), TRUE);
                 EnableWindow(GetDlgItem(hDlg, IDC_SEND_MESSAGE), TRUE);
             };

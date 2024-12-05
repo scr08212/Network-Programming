@@ -3,16 +3,17 @@
 #include <string>
 #include <filesystem>
 #include <thread>
+#include <WS2tcpip.h>
 
 using namespace std;
 
-enum class IPVersion : uint8_t
+enum class IPVersion: uint8_t
 {
     IPv4 = 0x01,
     IPv6 = 0x02
 };
 
-enum class Protocol :uint8_t
+enum class Protocol: uint8_t
 {
     TCP = 0X01,
     UDP = 0X02
@@ -23,6 +24,27 @@ struct ServerInfo
     string address;
     int port;
 };
+
+typedef union {
+    struct ip_mreq ipv4;   // IPv4 멀티캐스트 요청
+    struct ipv6_mreq ipv6; // IPv6 멀티캐스트 요청
+} IpMreqUnion;
+
+#pragma pack(1)
+struct Packet 
+{
+    uint8_t type;           // 데이터 타입
+    uint32_t dataSize;      // 데이터 크기
+    string data;            // 실제 데이터
+ 
+    Packet(uint8_t type, uint32_t dataSize, string data)
+    {
+        this->type = type;
+        this->dataSize = dataSize;
+        this->data = data;
+    }
+}; 
+#pragma pack()
 
 typedef void (*OnConnectedListener)(HWND);
 typedef void (*OnDisconnectedListener)(HWND);
@@ -40,15 +62,21 @@ private:
     Protocol _protocol;
     bool _stopFlag;
     thread _recvThread;
-    HWND hDlg;
-    sockaddr_storage addrStorage;
+    sockaddr_storage _serverAddrStorage;
+    sockaddr_storage _multicastAddrStorage;
+    HWND _hDlg;
+
 
     void logError(const char* msg, bool fatal = false);
     void receiveThread();
-    void sendData(string header, string data);
+    void handleReceivedData(uint8_t type, string data);
+    void sendData(Packet sendPacket);
     sockaddr* getServerSockAddr();
+    Packet deserializePacket(const char* buf, int size);
 
 public:
+    Client();
+
     OnConnectedListener onConnected;
     OnDisconnectedListener onDisconnected;
     OnMessageReceivedListener onMesssageReceived;

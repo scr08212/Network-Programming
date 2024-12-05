@@ -3,13 +3,26 @@
 #include <ws2tcpip.h>
 #include <atlconv.h>
 #include <fstream>
+#include <cmath>
+#include "resource2.h"
+#include <map>
 
-#define BUFSIZE 512
+#define BUFSIZE 2048
 #define HEADERSIZE 5
+
 #define MESSAGE 0X01
 #define FILE 0x02
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
+
+#define MULTICASTIP "235.7.8.9"
+#define MULTICASTIP_V6 "FF12::1:2:3:4"
+#define LOCALPORT 9002
+
+Client::Client()
+    :_stopFlag(true)
+{
+}
 
 void Client::logError(const char* msg, bool fatal)
 {
@@ -29,118 +42,138 @@ void Client::logError(const char* msg, bool fatal)
 
 void Client::receiveThread()
 {
-    sockaddr peerAddr;
-    int addrlen;
+    char buf[BUFSIZE];
+    int received;
 
-    while (!_stopFlag)
+    while (true)
     {
-        char buf[BUFSIZE] = {};
-        int received;
-        if (_protocol == Protocol::TCP)
-            received = recv(_clientSocket, buf, BUFSIZE, 0);
-        else
-            received = recvfrom(_clientSocket, buf, BUFSIZE, 0, &peerAddr, &addrlen);
-
-        if (_stopFlag)
-            break;
-        if (received <= 0)
-        {
-            logError("recv()", true);
-            break;
-        }
-
-        uint8_t type = buf[0];
-        uint32_t length;
-        memcpy(&length, buf + 1, 4);
-
+        uint8_t type = 0x00;
         string data;
-        if (received > HEADERSIZE)
-        {
-            data = string(buf + HEADERSIZE, received - HEADERSIZE);
-        }
 
-        // 전체 데이터가 더 있다면 반복하여 계속 받기
-        uint32_t totalReceived = received - HEADERSIZE;
-        while (totalReceived < length)
+        if (_protocol == Protocol::TCP)
         {
-            int nextReceived;
-            if (_protocol == Protocol::TCP)
-                nextReceived = recv(_clientSocket, buf, BUFSIZE, 0);
-            else
-                nextReceived = recvfrom(_clientSocket, buf, BUFSIZE, 0, &peerAddr, &addrlen);
+            received = recv(_clientSocket, buf, BUFSIZE, 0);
 
-            if (nextReceived <= 0)
+            if (received <= 0)
             {
+                if (_stopFlag)
+                    break;
                 logError("recv()", true);
                 break;
             }
 
-            data.append(buf, nextReceived);
-            totalReceived += nextReceived;
-        }
-        data += '\0';
+            type = buf[0];
+            uint32_t length;
+            memcpy(&length, buf + 1, 4);
 
-        // 후처리
-        if (type == MESSAGE)
-        {
-            USES_CONVERSION;
-            wstring wstr = wstring(A2W(data.c_str()));
-            onMesssageReceived(hDlg, wstr);
+            if (received > HEADERSIZE)
+            {
+                data = string(buf + HEADERSIZE, received - HEADERSIZE);
+            }
+
+            // 전체 데이터가 더 있다면 반복하여 계속 받기
+            uint32_t totalReceived = received - HEADERSIZE;
+            while (totalReceived < length)
+            {
+                int nextReceived;
+                nextReceived = recv(_clientSocket, buf, BUFSIZE, 0);
+
+                if (nextReceived <= 0)
+                {
+                    logError("recv()", true);
+                    break;
+                }
+
+                data.append(buf, nextReceived);
+                totalReceived += nextReceived;
+            }
+            data += '\0';
         }
-        else if (type == FILE)
+        else
         {
-            size_t delimiterPos = data.find('?');
-            if (delimiterPos == string::npos)
+            sockaddr_in6 clientAddr;
+            int addrlen = sizeof(clientAddr);
+            received = recvfrom(_clientSocket, buf, BUFSIZE, 0, (sockaddr*)&clientAddr, &addrlen);
+
+            if (received <= 0)
+            {
+                if (_stopFlag)
+                    break;
+                logError("recvfrom()", true);
                 break;
+            }
 
-            string outputDirectory = "output/";
-            if (!filesystem::exists(outputDirectory))
-                filesystem::create_directories(outputDirectory);
-
-            string fileName = data.substr(0, delimiterPos);
-            string binaryData = data.substr(delimiterPos + 1);
-
-            outputDirectory += fileName;
-
-            ofstream outputFile(outputDirectory, ios::binary);
-            if (!outputFile.is_open())
-                break;
-
-            outputFile.write(binaryData.c_str(), binaryData.size());
-            outputFile.close();
-
-            wstring wstr(L"File received");
-            onFileReceived(hDlg, wstr);
+            type = buf[0];
+            uint32_t length;
+            memcpy(&length, buf + 1, 4);
+            data = string(buf + HEADERSIZE, received - HEADERSIZE);
         }
-        else if (type == DRAWING)
-        {
-            // color 추출
-            size_t colorEnd = data.find('?');
-            COLORREF color = std::stoi(data.substr(0, colorEnd)); // color 값
 
-            // from 좌표 추출
-            size_t fromStart = colorEnd + 1;
-            size_t fromSeparator = data.find(':', fromStart);
-            int fromX = std::stoi(data.substr(fromStart, fromSeparator - fromStart));
-            size_t fromEnd = data.find('?', fromSeparator);
-            int fromY = std::stoi(data.substr(fromSeparator + 1, fromEnd - fromSeparator - 1));
+        handleReceivedData(type, data);
+    }
+}
 
-            POINT from = { fromX, fromY };
+void Client::handleReceivedData(uint8_t type, string data)
+{
+    if (type == MESSAGE)
+    {
+        USES_CONVERSION;
+        wstring wstr = wstring(A2W(data.c_str()));
+        onMesssageReceived(_hDlg, wstr);
+    }
+    else if (type == FILE)
+    {
+        size_t delimiterPos = data.find('?');
+        if (delimiterPos == string::npos)
+            return;
 
-            // to 좌표 추출
-            size_t toStart = fromEnd + 1;
-            size_t toSeparator = data.find(':', toStart);
-            int toX = std::stoi(data.substr(toStart, toSeparator - toStart));
-            int toY = std::stoi(data.substr(toSeparator + 1));
+        string outputDirectory = "output/";
+        if (!filesystem::exists(outputDirectory))
+            filesystem::create_directories(outputDirectory);
 
-            POINT to = { toX, toY };
+        string fileName = data.substr(0, delimiterPos);
+        string binaryData = data.substr(delimiterPos + 1);
 
-            onDrawingReceived(hDlg, color, from, to);
-        }
-        else if (type == CLEARCANVAS)
-        {
-            onClearCanvasRequested(hDlg);
-        }
+        outputDirectory += fileName;
+
+        ofstream outputFile(outputDirectory, ios::binary);
+        if (!outputFile.is_open())
+            return;
+
+        outputFile.write(binaryData.c_str(), binaryData.size());
+        outputFile.close();
+
+        wstring wstr(L"File received");
+        onFileReceived(_hDlg, wstr);
+    }
+    else if (type == DRAWING)
+    {
+        // color 추출
+        size_t colorEnd = data.find('?');
+        COLORREF color = std::stoi(data.substr(0, colorEnd)); // color 값
+
+        // from 좌표 추출
+        size_t fromStart = colorEnd + 1;
+        size_t fromSeparator = data.find(':', fromStart);
+        int fromX = std::stoi(data.substr(fromStart, fromSeparator - fromStart));
+        size_t fromEnd = data.find('?', fromSeparator);
+        int fromY = std::stoi(data.substr(fromSeparator + 1, fromEnd - fromSeparator - 1));
+
+        POINT from = { fromX, fromY };
+
+        // to 좌표 추출
+        size_t toStart = fromEnd + 1;
+        size_t toSeparator = data.find(':', toStart);
+        int toX = std::stoi(data.substr(toStart, toSeparator - toStart));
+        int toY = std::stoi(data.substr(toSeparator + 1));
+
+        POINT to = { toX, toY };
+
+        onDrawingReceived(_hDlg, color, from, to);
+    }
+    else if (type == CLEARCANVAS)
+    {
+        onClearCanvasRequested(_hDlg);
     }
 }
 
@@ -155,18 +188,21 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
     _ipVersion = ipVersion;
     _protocol = protocol;
 
-    memset(&addrStorage, 0, sizeof(addrStorage));
+    memset(&_serverAddrStorage, 0, sizeof(_serverAddrStorage));
+    memset(&_multicastAddrStorage, 0, sizeof(_multicastAddrStorage));
 
     if (_ipVersion == IPVersion::IPv4)
     {
-        sockaddr_in* addr = (sockaddr_in*)&addrStorage;
+        // serverAddr
+        sockaddr_in* addr = (sockaddr_in*)&_serverAddrStorage;
         addr->sin_family = AF_INET;
         addr->sin_port = htons(_serverInfo.port);
         inet_pton(AF_INET, _serverInfo.address.c_str(), &addr->sin_addr);
     }
-    else
+    else // IPv6
     {
-        sockaddr_in6* addr = (sockaddr_in6*)&addrStorage;
+        // serverAddr
+        sockaddr_in6* addr = (sockaddr_in6*)&_serverAddrStorage;
         addr->sin6_family = AF_INET6;
         addr->sin6_port = htons(_serverInfo.port);
         inet_pton(AF_INET6, _serverInfo.address.c_str(), &addr->sin6_addr);
@@ -181,9 +217,10 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
         return;
     }
 
+    int retval;
     if (_protocol == Protocol::TCP)
     {
-        int retval = connect(_clientSocket, getServerSockAddr(), sizeof(serverAddr));
+         retval = connect(_clientSocket, getServerSockAddr(), sizeof(serverAddr));
         if (retval == SOCKET_ERROR)
         {
             logError("connect()", true);
@@ -191,18 +228,80 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
         }
     }
 
+
+    IpMreqUnion mreq;
+    if (_protocol == Protocol::UDP)
+    {
+        DWORD optval = 1;
+        retval = setsockopt(_clientSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval));
+        if(retval == SOCKET_ERROR)
+        {
+            logError("setsockopt()", true);
+            return;
+        }
+
+        if (_ipVersion == IPVersion::IPv4)
+        {
+            struct sockaddr_in localaddr;
+            memset(&localaddr, 0, sizeof(localaddr));
+            localaddr.sin_family = AF_INET;
+            localaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+            localaddr.sin_port = htons(LOCALPORT);
+
+            retval = bind(_clientSocket, (struct sockaddr*)&localaddr, sizeof(localaddr));
+            if(retval == SOCKET_ERROR)
+            {
+                logError("setsockopt()", true);
+                return;
+            }
+
+            inet_pton(AF_INET, MULTICASTIP, &mreq.ipv4.imr_multiaddr);
+            mreq.ipv4.imr_interface.s_addr = htonl(INADDR_ANY);
+            retval = setsockopt(_clientSocket, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&mreq.ipv4, sizeof(mreq.ipv4));
+            if (retval == SOCKET_ERROR)
+            {
+                logError("setsockopt()", true);
+                return;
+            }
+        }
+        else
+        {
+            struct sockaddr_in6 localaddr;
+            memset(&localaddr, 0, sizeof(localaddr));
+            localaddr.sin6_family = AF_INET6;
+            localaddr.sin6_addr = in6addr_any;
+            localaddr.sin6_port = htons(LOCALPORT);
+
+            retval = bind(_clientSocket, (struct sockaddr*)&localaddr, sizeof(localaddr));
+            if (retval == SOCKET_ERROR)
+            {
+                logError("setsockopt()", true);
+                return;
+            }
+
+            inet_pton(AF_INET6, MULTICASTIP_V6, &mreq.ipv6.ipv6mr_multiaddr);
+            mreq.ipv6.ipv6mr_interface = 0;
+            retval = setsockopt(_clientSocket, IPPROTO_IPV6, IPV6_JOIN_GROUP, (const char*)&mreq.ipv6, sizeof(mreq.ipv6));
+            if (retval == SOCKET_ERROR)
+            {
+                logError("setsockopt()", true);
+                return;
+            }   
+        }
+    }
+
     _stopFlag = false;
     _recvThread = thread(&Client::receiveThread, this);
 
-    onConnected(hDlg);
+    onConnected(_hDlg);
 }
 
 void Client::disconnect()
 {
     if (_clientSocket != NULL)
     {
-        shutdown(_clientSocket, SD_BOTH); // 송수신 중단
-        closesocket(_clientSocket);      // 소켓 닫기
+        shutdown(_clientSocket, SD_BOTH);
+        closesocket(_clientSocket);
         _clientSocket = NULL;
     }
 
@@ -211,33 +310,38 @@ void Client::disconnect()
         _recvThread.join();
 
     WSACleanup();
-    onDisconnected(hDlg);
+    onDisconnected(_hDlg);
 }
 
-void Client::sendData(string header, string data)
+void Client::sendData(Packet sendPacket)
 {
+    char header[HEADERSIZE]{};
+    header[0] = sendPacket.type;
+    memcpy(header + 1, &sendPacket.dataSize, sizeof(sendPacket.dataSize));
+
     if (_protocol == Protocol::TCP)
     {
-        if (send(_clientSocket, header.c_str(), HEADERSIZE, 0) == SOCKET_ERROR)
+        if (send(_clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
         {
-            logError("send()", true);
+            logError("send()");
             return;
         }
 
-        if (send(_clientSocket, data.c_str(), strlen(data.c_str()), 0) == SOCKET_ERROR)
+        if (send(_clientSocket, sendPacket.data.c_str(), sendPacket.dataSize, 0) == SOCKET_ERROR)
         {
-            logError("send()", true);
+            logError("send()");
             return;
         }
     }
     else
     {
-        string str(header, HEADERSIZE);
-        str += data;
-        auto serveraddr = getServerSockAddr();
-        if (sendto(_clientSocket, str.c_str(), strlen(str.c_str()), 0, serveraddr, sizeof(serveraddr)) == SOCKET_ERROR)
+        string msg(header, 5);
+        msg += sendPacket.data;
+
+        int sentBytes = sendto(_clientSocket, msg.c_str(), msg.size(), 0, getServerSockAddr(), sizeof(_serverAddrStorage));
+        if (sentBytes == SOCKET_ERROR)
         {
-            logError("send()", true);
+            logError("sendto()");
             return;
         }
     }
@@ -245,21 +349,13 @@ void Client::sendData(string header, string data)
 
 void Client::sendMessage(string msg)
 {
-    // 헤더
-    uint8_t type = MESSAGE;
-    uint32_t length = (uint32_t)strlen(msg.c_str());
+    Packet packet(MESSAGE, msg.size(), msg);
 
-    char header[HEADERSIZE] = {};
-    header[0] = type;
-    memcpy(header + 1, &length, sizeof(length));
-
-    sendData(string(header), msg);
+    sendData(packet);
 }
 
 void Client::sendFile(filesystem::path filePath)
 {
-    uint8_t type = FILE;
-
     // 파일 열기
     ifstream file(filePath, ios::binary);
     if (!file.is_open())
@@ -280,54 +376,34 @@ void Client::sendFile(filesystem::path filePath)
         logError("file.read()", false);
         return;
     }
-
-    // 파일명 얻기
     string filename = filePath.filename().string();
-
     // 파일명과 바이너리 데이터를 합침 (파일명?바이너리 데이터)
     string data = filename + "?" + string(buffer.begin(), buffer.end());
 
-    // 데이터 길이 계산
-    uint32_t length = static_cast<uint32_t>(data.size());
+    Packet packet(FILE, data.size(), data);
 
-    // 헤더 생성
-    char header[HEADERSIZE] = {};
-    header[0] = type;
-    memcpy(header + 1, &length, sizeof(length));
-
-    sendData(string(header), data);
+    sendData(packet); 
 }
 
 void Client::sendDrawing(COLORREF color, POINT from, POINT to)
 {
-    uint8_t type = DRAWING;
-
     string data = to_string(color) + "?" + to_string(from.x) + ":" + to_string(from.y) + "?" + to_string(to.x) + ":" + to_string(to.y); // color?x:y?x:y 양식으로 서버에 전달
-    uint32_t length = strlen(data.c_str());
 
-    char header[HEADERSIZE] = {};
-    header[0] = type;
-    memcpy(header + 1, &length, sizeof(length));
+    Packet packet(DRAWING, data.size(), data);
 
-    sendData(string(header), data);
+    sendData(packet);
 }
 
 void Client::sendClearCanvas()
 {
-    string data = " ";
-    uint8_t type = CLEARCANVAS;
-    uint32_t length = (uint32_t)strlen(data.c_str());
+    Packet packet(CLEARCANVAS, 1, " ");
 
-    char header[HEADERSIZE] = {};
-    header[0] = type;
-    memcpy(header + 1, &length, sizeof(length));
-
-    sendData(string(header), data);
+    sendData(packet);
 }
 
 void Client::setHDlg(HWND hDlg)
 {
-    this->hDlg = hDlg;
+    this->_hDlg = hDlg;
 }
 
 bool Client::getStopFlag()
@@ -337,5 +413,5 @@ bool Client::getStopFlag()
 
 sockaddr* Client::getServerSockAddr()
 {
-    return (sockaddr*)&addrStorage;
+    return (sockaddr*)&_serverAddrStorage;
 }
