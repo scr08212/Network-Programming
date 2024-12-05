@@ -83,6 +83,8 @@ void Client::receiveThread()
 
                 if (nextReceived <= 0)
                 {
+                    if (_stopFlag)
+                        break;
                     logError("recv()", true);
                     break;
                 }
