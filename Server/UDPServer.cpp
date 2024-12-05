@@ -21,9 +21,9 @@
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
 
-#define MULTICASTIP "::ffff:235.7.8.9"
+#define MULTICASTIP "::ffff:235.7.8.9" // 듀얼스택을 사용중이니 IPv4는 IPv6에 매핑해야됨.
 #define MULTICASTIP_V6 "FF12::1:2:3:4"
-#define REMOTEPORT 9002
+#define REMOTEPORT 9002 // 멀티캐스팅 포트
 
 using namespace std;
 
@@ -118,15 +118,21 @@ void UDPServer::receive()
         auto& chunks = chunksMap[key];
         chunks.push_back({ sequence, data });
 
-        // ack 
+        // ack 송신
         sendto(_sock, (char*)&sequence, sizeof(sequence), 0, (sockaddr*)&clientAddr, addrlen);
+
+        // sendto가 실패 -> 청크가 부족함 -> 무한루프 가능성
+        // 아직까지 문제된 적은 없음. 잘 작동함. 예외처리는 해야할듯.
 
         if (chunks.size() == totalChunks)
         {
+            // 청크 순서별로 정렬
             sort(chunks.begin(), chunks.end(), [](const pair<int, string>& a, const pair<int, string>& b) {
                 return a.first < b.first;
                 });
 
+            // 클라이언트로 다시 보냄.
+            // loopback 못하게 하는법은 아직 모르겠음.
             uint32_t totalChunks = chunks.size();
             for (auto& chunk : chunks)
             {
@@ -140,7 +146,7 @@ void UDPServer::receive()
                 memcpy(buffer.data() + 5, &sequence, sizeof(sequence));
                 memcpy(buffer.data() + 9, &totalChunks, sizeof(totalChunks));
                 memcpy(buffer.data() + 13, data.c_str(), dataSize);
-
+                
                 int sendBytes = sendto(_sock, buffer.data(), buffer.size(), 0, (sockaddr*)&remoteaddr_in6, sizeof(remoteaddr_in6));
                 if (sendBytes == SOCKET_ERROR)
                 {
@@ -148,7 +154,7 @@ void UDPServer::receive()
                 }
             }
             
-            cout << "received all " << totalChunks << " chunks" << endl;
+            std::cout << "received all " << totalChunks << " chunks" << endl;
             chunks.clear();
         }   
     }

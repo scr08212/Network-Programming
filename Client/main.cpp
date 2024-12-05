@@ -20,11 +20,13 @@ bool isCanvasInitialized;
 
 string getStringFromEditText(HWND hDlg, int id)
 {
+    // EditText는 유니코드를 씀. wstring으로 받아와야함
     string text = "";
     wchar_t addrW[1024] = { 0 };
     GetDlgItemTextW(hDlg, id, addrW, sizeof(addrW) / sizeof(wchar_t));
     wstring wstr = wstring(addrW);
 
+    // wstring to string
     USES_CONVERSION;
     text = string(W2A(wstr.c_str()));
 
@@ -135,7 +137,7 @@ INT_PTR CommandProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
             client.sendClearCanvas();
         }
         return TRUE;
-    case IDCANCEL:
+    case IDCANCEL: // 다이얼로그 닫았을 때(x버튼)
         client.disconnect();
         EndDialog(hDlg, IDCANCEL);
         return TRUE;
@@ -203,7 +205,7 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
         return CommandProc(hDlg, uMsg, wParam, lParam);
 
     case WM_MOUSEMOVE:
-        if (client.getStopFlag())
+        if (client.getStopFlag()) // 클라이언트가 실행중이지 않다면 그림 못그림
             break;
 
         HWND hCanvas = GetDlgItem(hDlg, IDC_CANVAS);
@@ -215,8 +217,9 @@ INT_PTR CALLBACK DlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         if (wParam == MK_LBUTTON)
         {
-            if (curPoint.x >= 1 && curPoint.x <= rect.right - 1 && curPoint.y >= 1 && curPoint.y <= rect.bottom - 1)
+            if (curPoint.x >= 1 && curPoint.x <= rect.right - 1 && curPoint.y >= 1 && curPoint.y <= rect.bottom - 1) // 테두리 제외 영역
             {
+                // clamp: 캔버스 바깥 영역에 그림 그려지지 않기 위해
                 prevPoint.x = clamp(prevPoint.x, 1L, rect.right - 1);
                 prevPoint.y = clamp(prevPoint.y, 1L, rect.bottom - 1);
 

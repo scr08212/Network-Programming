@@ -28,7 +28,7 @@
         if (_sock == INVALID_SOCKET)
             logError("socket()", true);
 
-        // Dual socket 사용
+        // 듀얼 스택 사용
         DWORD optval = 0;
         if (setsockopt(_sock, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&optval, sizeof(optval)) == SOCKET_ERROR)
             logError("setsockopt()", true);
@@ -62,10 +62,11 @@
                 continue;
             }
 
+            // 연결된 클라이언트 정보 얻어옴. 
             ClientInfo clientInfo;
             char addr[INET6_ADDRSTRLEN];
             sockaddr_in6* s = (sockaddr_in6*)&clientAddr;
-            if (IN6_IS_ADDR_V4MAPPED(&s->sin6_addr))
+            if (IN6_IS_ADDR_V4MAPPED(&s->sin6_addr)) // IPv4
             {
                 struct in_addr ipv4Addr;
                 memcpy(&ipv4Addr, &s->sin6_addr.s6_addr[12], sizeof(ipv4Addr));
@@ -83,6 +84,7 @@
 
             clients.push_back(clientInfo);
             printf("\n[TCP/%s] 클라이언트 접속: IP 주소= %s, 포트 번호 = %d\n", (clientInfo.ipVersion == IPVersion::IPv4 ? "IPv4" : "IPv6"), clientInfo.address.c_str(), clientInfo.port);
+
             thread(&TCPServer::receiveThread, this, clientInfo).detach();
         }
     }
@@ -92,7 +94,7 @@
         SOCKET clientSock = clientInfo.socket;
         while (true)
         {
-            char header[HEADERSIZE]; // 0: type 1-4: dataSize
+            char header[HEADERSIZE]; // 0: type, 1-4: dataSize
             if (recv(clientSock, header, HEADERSIZE, 0) <= 0)
             {
                 logError("recv()");
@@ -113,6 +115,7 @@
             string msg(header, HEADERSIZE);
             msg += data;
 
+            // 후처리
             bool loopback = false;
             switch (type)
             {
@@ -135,6 +138,7 @@
                 break;
             }
 
+            // 접속한 클라이언트들에 송신
             broadCast(clientSock, msg.c_str(), HEADERSIZE + length, loopback);
         }
 

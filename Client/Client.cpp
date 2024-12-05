@@ -10,7 +10,7 @@
 
 #define BUFSIZE 2048
 #define HEADERSIZE 5
-#define EXTRAHEADERSIZE 8
+#define EXTRAHEADERSIZE 8 // UDP에서 추가로 필요한 헤더 크기. 4바이트: 패킷번호, 4바이트: 총 패킷 수
 
 #define MESSAGE 0X01
 #define FILE 0x02
@@ -19,7 +19,7 @@
 
 #define MULTICASTIP "235.7.8.9"
 #define MULTICASTIP_V6 "FF12::1:2:3:4"
-#define LOCALPORT 9002
+#define LOCALPORT 9002 // 멀티캐스팅 포트
 
 Client::Client()
     :_stopFlag(true)
@@ -93,8 +93,12 @@ void Client::receiveThread()
             data += '\0';
             handleReceivedData(type, data);
         }
-        else
+        else // UDP
         {
+            // 왜 여기선 ACK를 안받아도 패킷손실이 없는지 모르겠음.
+            // 운이 좋은걸수도 있고, 크기가 작아서일 수도 있고, 그 외 내가 모르는 이유일 수도 있음.
+            // 잘 작동하니 수정은 안함
+
             sockaddr_in6 addr;
             int addrlen = sizeof(addr);
             recvBytes = recvfrom(_clientSocket, buf, BUFSIZE, 0, (sockaddr*)&addr, &addrlen);
@@ -144,12 +148,17 @@ void Client::handleReceivedData(uint8_t type, string data)
 {
     if (type == MESSAGE)
     {
+        // 형식 : 메시지
+
+        // string to wstring. editText와 같은 윈도우 다이얼로그는 유니코드를 사용함. wstirng으로 변환 필요.
         USES_CONVERSION;
         wstring wstr = wstring(A2W(data.c_str()));
         onMesssageReceived(_hDlg, wstr);
     }
     else if (type == FILE)
     {
+        // 형식 : 파일명?바이너리
+
         size_t delimiterPos = data.find('?');
         if (delimiterPos == string::npos)
             return;
@@ -175,6 +184,9 @@ void Client::handleReceivedData(uint8_t type, string data)
     }
     else if (type == DRAWING)
     {
+        // 형식 : COLORPREF?from.x:from.y?to.x:to.y
+
+
         // color 추출
         size_t colorEnd = data.find('?');
         COLORREF color = std::stoi(data.substr(0, colorEnd)); // color 값
@@ -200,6 +212,7 @@ void Client::handleReceivedData(uint8_t type, string data)
     }
     else if (type == CLEARCANVAS)
     {
+        // 실질 데이터 없음. 타입과 1바이트 공백문자만 받음
         onClearCanvasRequested(_hDlg);
     }
 }
@@ -210,6 +223,7 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
         return;
 
+    // 기본적인 정보들 채움
     _serverInfo.address = serverAddr;
     _serverInfo.port = port;
     _ipVersion = ipVersion;
@@ -220,7 +234,6 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
 
     if (_ipVersion == IPVersion::IPv4)
     {
-        // serverAddr
         sockaddr_in* addr = (sockaddr_in*)&_serverAddrStorage;
         addr->sin_family = AF_INET;
         addr->sin_port = htons(_serverInfo.port);
@@ -228,7 +241,6 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
     }
     else // IPv6
     {
-        // serverAddr
         sockaddr_in6* addr = (sockaddr_in6*)&_serverAddrStorage;
         addr->sin6_family = AF_INET6;
         addr->sin6_port = htons(_serverInfo.port);
@@ -255,12 +267,14 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
         }
     }
 
-
+    // UDP 설정
     IpMreqUnion mreq;
     if (_protocol == Protocol::UDP)
     {
+        // UDP에서만 쓰는 송신 전용 소켓.
         _sendSocket = socket(af, type, 0);
 
+        // SO_REUSEADDR
         DWORD optval = 1;
         if(setsockopt(_clientSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval)) == SOCKET_ERROR)
         {
@@ -273,6 +287,7 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
             return;
         }
 
+        // 수신 소켓 바인딩 + 멀티캐스트 그룹 가입 
         if (_ipVersion == IPVersion::IPv4)
         {
             struct sockaddr_in localaddr;
@@ -331,6 +346,8 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
 
 void Client::disconnect()
 {
+    // 종종 disconnect를 호출해도 경고문이 뜨는 경우가 있음. 큰 문제는 아님.
+
     if (_clientSocket != NULL)
     {
         shutdown(_clientSocket, SD_BOTH);
@@ -354,19 +371,26 @@ void Client::sendData(Packet sendPacket)
 
     if (_protocol == Protocol::TCP)
     {
+        // 5바이트 헤더 보냄
         if (send(_clientSocket, header, HEADERSIZE, 0) == SOCKET_ERROR)
         {
             logError("send()");
             return;
         }
+        // 본 데이터 보냄
         if (send(_clientSocket, sendPacket.data.c_str(), sendPacket.dataSize, 0) == SOCKET_ERROR)
         {
             logError("send()");
             return;
         }
     }
-    else
+    else // UDP
     {
+        /*
+        1. 데이터를 여러개의 청크로 나눔
+        2. 청크 하나 보냄 -> 서버로부터 ACK 메시지 기다림. -> 5회 이상 못받을시 전송 포기 -> 치명적이지 않은 오류 호출
+        3. 이것때문에 UDP에 수신 전용 소켓 만듬. ACK를 받는 recvfrom과 receiveThread의 recvfrom가 같은 소켓을 공유하면 누가 ACK를 받을지 예측할 수 없음
+        */
         uint32_t sequence = 1;
         uint32_t totalChunks = sendPacket.dataSize / (BUFSIZE - HEADERSIZE - EXTRAHEADERSIZE);
         if (sendPacket.dataSize % (BUFSIZE - HEADERSIZE - EXTRAHEADERSIZE) != 0)
