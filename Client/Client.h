@@ -72,7 +72,6 @@ private:
     void handleReceivedData(uint8_t type, string data);
     void sendData(Packet sendPacket);
     sockaddr* getServerSockAddr();
-    Packet deserializePacket(const char* buf, int size);
 
 public:
     Client();

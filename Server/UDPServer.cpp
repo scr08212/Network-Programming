@@ -7,19 +7,20 @@
 #include <ws2tcpip.h>
 #include <iostream>
 #include <thread>
-#include <map>
 #include <vector>
 #include <algorithm> 
+#include <map>
 
 #pragma comment(lib, "ws2_32.lib")
 
 #define BUFSIZE 2048
-#define HEADERSIZE 5
+#define HEADERSIZE 13
 
 #define MESSAGE 0X01
 #define FILE 0x02
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
+#define END 0x05
 
 #define MULTICASTIP "::ffff:235.7.8.9"
 #define MULTICASTIP_V6 "FF12::1:2:3:4"
@@ -62,14 +63,16 @@ void UDPServer::run(int port)
 void UDPServer::receive()
 {
     sockaddr_in6 clientAddr = {};
+    sockaddr_in6 remoteaddr_in6;
     int addrlen;
     char buf[BUFSIZE];
     int recvBytes;
 
-    struct sockaddr_in6 remoteaddr_in6;
     memset(&remoteaddr_in6, 0, sizeof(remoteaddr_in6));
     remoteaddr_in6.sin6_family = AF_INET6;
     remoteaddr_in6.sin6_port = htons(REMOTEPORT);
+
+    map<string, vector<pair<uint32_t, string>>> chunksMap{};
 
     while (true)
     {
@@ -103,14 +106,47 @@ void UDPServer::receive()
         clientInfo.port = ntohs(clientAddr.sin6_port);
 
         uint8_t type = buf[0];
-        uint32_t length;
+        uint32_t length, sequence, totalChunks;
         memcpy(&length, buf + 1, 4);
-        string data(buf + 5, recvBytes - HEADERSIZE);
+        memcpy(&sequence, buf + 5, 4);
+        memcpy(&totalChunks, buf + 9, 4);
+        string data(buf + HEADERSIZE, recvBytes - HEADERSIZE);
+        
+        if (sequence > totalChunks)
+            continue;
 
-        int sendBytes = sendto(_sock, buf, recvBytes, 0, (sockaddr*)&remoteaddr_in6, sizeof(remoteaddr_in6));
-        if (sendBytes == SOCKET_ERROR)
+        string key = clientInfo.address + to_string(clientInfo.port);
+        auto& chunks = chunksMap[key];
+        chunks.push_back({ sequence, data });
+        if (chunks.size() == totalChunks)
         {
-            logError("sendto() failed");
-        }                      
+            sort(chunks.begin(), chunks.end(), [](const pair<int, string>& a, const pair<int, string>& b) {
+                return a.first < b.first;
+                });
+
+            uint32_t totalChunks = chunks.size();
+            for (auto& chunk : chunks)
+            {
+                uint32_t sequence = chunk.first;
+                string data = chunk.second;
+                uint32_t dataSize = data.size();
+
+                vector<char> buffer(HEADERSIZE + dataSize);
+                memcpy(buffer.data(), &type, sizeof(type));
+                memcpy(buffer.data() + 1, &dataSize, sizeof(dataSize));
+                memcpy(buffer.data() + 5, &sequence, sizeof(sequence));
+                memcpy(buffer.data() + 9, &totalChunks, sizeof(totalChunks));
+                memcpy(buffer.data() + 13, data.c_str(), dataSize);
+
+                int sendBytes = sendto(_sock, buffer.data(), buffer.size(), 0, (sockaddr*)&remoteaddr_in6, sizeof(remoteaddr_in6));
+                if (sendBytes == SOCKET_ERROR)
+                {
+                    logError("sendto() failed");
+                }
+            }
+            
+            cout << "received all " << totalChunks << " chunks" << endl;
+            chunks.clear();
+        }   
     }
 }

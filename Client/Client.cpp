@@ -9,6 +9,7 @@
 
 #define BUFSIZE 2048
 #define HEADERSIZE 5
+#define EXTRAHEADERSIZE 8
 
 #define MESSAGE 0X01
 #define FILE 0x02
@@ -43,7 +44,8 @@ void Client::logError(const char* msg, bool fatal)
 void Client::receiveThread()
 {
     char buf[BUFSIZE];
-    int received;
+    int recvBytes;
+    vector<pair<uint32_t, string>> chunks;
 
     while (true)
     {
@@ -52,9 +54,9 @@ void Client::receiveThread()
 
         if (_protocol == Protocol::TCP)
         {
-            received = recv(_clientSocket, buf, BUFSIZE, 0);
+            recvBytes = recv(_clientSocket, buf, BUFSIZE, 0);
 
-            if (received <= 0)
+            if (recvBytes <= 0)
             {
                 if (_stopFlag)
                     break;
@@ -66,13 +68,13 @@ void Client::receiveThread()
             uint32_t length;
             memcpy(&length, buf + 1, 4);
 
-            if (received > HEADERSIZE)
+            if (recvBytes > HEADERSIZE)
             {
-                data = string(buf + HEADERSIZE, received - HEADERSIZE);
+                data = string(buf + HEADERSIZE, recvBytes - HEADERSIZE);
             }
 
             // 전체 데이터가 더 있다면 반복하여 계속 받기
-            uint32_t totalReceived = received - HEADERSIZE;
+            uint32_t totalReceived = recvBytes - HEADERSIZE;
             while (totalReceived < length)
             {
                 int nextReceived;
@@ -88,14 +90,15 @@ void Client::receiveThread()
                 totalReceived += nextReceived;
             }
             data += '\0';
+            handleReceivedData(type, data);
         }
         else
         {
             sockaddr_in6 clientAddr;
             int addrlen = sizeof(clientAddr);
-            received = recvfrom(_clientSocket, buf, BUFSIZE, 0, (sockaddr*)&clientAddr, &addrlen);
+            recvBytes = recvfrom(_clientSocket, buf, BUFSIZE, 0, (sockaddr*)&clientAddr, &addrlen);
 
-            if (received <= 0)
+            if (recvBytes <= 0)
             {
                 if (_stopFlag)
                     break;
@@ -103,13 +106,36 @@ void Client::receiveThread()
                 break;
             }
 
-            type = buf[0];
-            uint32_t length;
+            uint8_t type = buf[0];
+            uint32_t length, sequence, totalChunks;
             memcpy(&length, buf + 1, 4);
-            data = string(buf + HEADERSIZE, received - HEADERSIZE);
+            memcpy(&sequence, buf + 5, 4);
+            memcpy(&totalChunks, buf + 9, 4);
+            string data(buf + HEADERSIZE + EXTRAHEADERSIZE, recvBytes - HEADERSIZE - EXTRAHEADERSIZE);
+            
+            if (sequence > totalChunks)
+                continue;
+
+            chunks.push_back({ sequence, data });
+
+            if (chunks.size() == totalChunks)
+            {
+                sort(chunks.begin(), chunks.end(), [](const pair<int, string>& a, const pair<int, string>& b) {
+                    return a.first < b.first;
+                    });
+
+                string data;
+                for (auto& value : chunks)
+                {
+                    data += value.second;
+                }
+
+                handleReceivedData(type, data);
+
+                chunks.clear();
+            }
         }
 
-        handleReceivedData(type, data);
     }
 }
 
@@ -326,7 +352,6 @@ void Client::sendData(Packet sendPacket)
             logError("send()");
             return;
         }
-
         if (send(_clientSocket, sendPacket.data.c_str(), sendPacket.dataSize, 0) == SOCKET_ERROR)
         {
             logError("send()");
@@ -335,14 +360,32 @@ void Client::sendData(Packet sendPacket)
     }
     else
     {
-        string msg(header, 5);
-        msg += sendPacket.data;
+        uint32_t sequence = 1;
+        uint32_t totalChunks = sendPacket.dataSize / (BUFSIZE - HEADERSIZE - EXTRAHEADERSIZE);
+        if (sendPacket.dataSize % (BUFSIZE - HEADERSIZE - EXTRAHEADERSIZE) != 0)
+            totalChunks++;
 
-        int sentBytes = sendto(_clientSocket, msg.c_str(), msg.size(), 0, getServerSockAddr(), sizeof(_serverAddrStorage));
-        if (sentBytes == SOCKET_ERROR)
+        int sent = 0;
+        while (sent < sendPacket.dataSize)
         {
-            logError("sendto()");
-            return;
+            uint32_t size = min(BUFSIZE - HEADERSIZE - EXTRAHEADERSIZE, sendPacket.dataSize - sent);
+
+            vector<uint8_t> buffer(HEADERSIZE + EXTRAHEADERSIZE + size);
+            buffer[0] = sendPacket.type;
+            memcpy(buffer.data() + 1, &size, sizeof(size));
+            memcpy(buffer.data() + 1 + 4, &sequence, sizeof(sequence));
+            memcpy(buffer.data() + 1 + 4 + 4, &totalChunks, sizeof(totalChunks));
+            memcpy(buffer.data() + HEADERSIZE + EXTRAHEADERSIZE, sendPacket.data.c_str() + sent, size);
+
+            int sentBytes = sendto(_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0, getServerSockAddr(), sizeof(_serverAddrStorage));
+            if (sentBytes == SOCKET_ERROR)
+            {
+                logError("sendto()");
+                return;
+            }
+
+            sequence++;
+            sent += sentBytes;
         }
     }
 }
