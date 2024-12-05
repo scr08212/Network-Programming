@@ -20,7 +20,6 @@
 #define FILE 0x02
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
-#define END 0x05
 
 #define MULTICASTIP "::ffff:235.7.8.9"
 #define MULTICASTIP_V6 "FF12::1:2:3:4"
@@ -118,6 +117,10 @@ void UDPServer::receive()
         string key = clientInfo.address + to_string(clientInfo.port);
         auto& chunks = chunksMap[key];
         chunks.push_back({ sequence, data });
+
+        // ack 
+        sendto(_sock, (char*)&sequence, sizeof(sequence), 0, (sockaddr*)&clientAddr, addrlen);
+
         if (chunks.size() == totalChunks)
         {
             sort(chunks.begin(), chunks.end(), [](const pair<int, string>& a, const pair<int, string>& b) {

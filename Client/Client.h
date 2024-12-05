@@ -57,6 +57,7 @@ class Client
 {
 private:
     SOCKET _clientSocket;
+    SOCKET _sendSocket; // UDP 전용. UDP에선 send랑 recv소켓(_clientSock)을 따로 뒀음.
     ServerInfo _serverInfo;
     IPVersion _ipVersion;
     Protocol _protocol;

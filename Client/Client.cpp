@@ -6,6 +6,7 @@
 #include <cmath>
 #include "resource2.h"
 #include <map>
+#include <set>
 
 #define BUFSIZE 2048
 #define HEADERSIZE 5
@@ -94,9 +95,9 @@ void Client::receiveThread()
         }
         else
         {
-            sockaddr_in6 clientAddr;
-            int addrlen = sizeof(clientAddr);
-            recvBytes = recvfrom(_clientSocket, buf, BUFSIZE, 0, (sockaddr*)&clientAddr, &addrlen);
+            sockaddr_in6 addr;
+            int addrlen = sizeof(addr);
+            recvBytes = recvfrom(_clientSocket, buf, BUFSIZE, 0, (sockaddr*)&addr, &addrlen);
 
             if (recvBytes <= 0)
             {
@@ -258,9 +259,15 @@ void Client::connectToServer(string serverAddr, int port, IPVersion ipVersion, P
     IpMreqUnion mreq;
     if (_protocol == Protocol::UDP)
     {
+        _sendSocket = socket(af, type, 0);
+
         DWORD optval = 1;
-        retval = setsockopt(_clientSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval));
-        if(retval == SOCKET_ERROR)
+        if(setsockopt(_clientSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval)) == SOCKET_ERROR)
+        {
+            logError("setsockopt()", true);
+            return;
+        }
+        if (setsockopt(_sendSocket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof(optval)) == SOCKET_ERROR)
         {
             logError("setsockopt()", true);
             return;
@@ -365,6 +372,7 @@ void Client::sendData(Packet sendPacket)
         if (sendPacket.dataSize % (BUFSIZE - HEADERSIZE - EXTRAHEADERSIZE) != 0)
             totalChunks++;
 
+        int maxRetries = 5;
         int sent = 0;
         while (sent < sendPacket.dataSize)
         {
@@ -377,15 +385,43 @@ void Client::sendData(Packet sendPacket)
             memcpy(buffer.data() + 1 + 4 + 4, &totalChunks, sizeof(totalChunks));
             memcpy(buffer.data() + HEADERSIZE + EXTRAHEADERSIZE, sendPacket.data.c_str() + sent, size);
 
-            int sentBytes = sendto(_clientSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0, getServerSockAddr(), sizeof(_serverAddrStorage));
-            if (sentBytes == SOCKET_ERROR)
+            int retryCount = 0;
+            bool ackReceived = false;
+
+            while(!ackReceived && retryCount < maxRetries)
             {
-                logError("sendto()");
+                if (sendto(_sendSocket, reinterpret_cast<const char*>(buffer.data()), buffer.size(), 0, getServerSockAddr(), sizeof(_serverAddrStorage)) == SOCKET_ERROR)
+                {
+                    logError("sendto()");
+                    return;
+                }
+
+                sockaddr_in6 addr;
+                int addrlen = sizeof(addr);
+
+                char ackBuffer[8];
+                int retval = recvfrom(_sendSocket, ackBuffer, sizeof(ackBuffer), 0, (sockaddr*)&addr, &addrlen);
+                if (retval > 0)
+                {
+                    uint32_t ackSeq;
+                    memcpy(&ackSeq, ackBuffer, sizeof(uint32_t));
+
+                    if (ackSeq == sequence) // 올바른 ACK 확인
+                    {
+                        ackReceived = true;
+                    }
+                }
+                retryCount++;
+            }
+
+            if (!ackReceived)
+            {
+                logError("recvfrom()");
                 return;
             }
 
             sequence++;
-            sent += sentBytes;
+            sent += size;
         }
     }
 }
