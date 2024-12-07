@@ -21,8 +21,8 @@
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
 
-#define MULTICASTIP "::ffff:235.7.8.9" // 듀얼스택을 사용중이니 IPv4는 IPv6에 매핑해야됨.
-#define MULTICASTIP_V6 "FF12::1:2:3:4"
+#define MULTICASTIP "::ffff:224.0.0.1" // 듀얼스택을 사용중이니 IPv4는 IPv6에 매핑해야됨.
+#define MULTICASTIP_V6 "ff02::1"
 #define REMOTEPORT 9002 // 멀티캐스팅 포트
 
 using namespace std;
@@ -63,6 +63,7 @@ void UDPServer::receive()
 {
     sockaddr_in6 clientAddr = {};
     sockaddr_in6 remoteaddr_in6;
+    sockaddr_in6 remoteaddr_in;
     int addrlen;
     char buf[BUFSIZE];
     int recvBytes;
@@ -70,6 +71,12 @@ void UDPServer::receive()
     memset(&remoteaddr_in6, 0, sizeof(remoteaddr_in6));
     remoteaddr_in6.sin6_family = AF_INET6;
     remoteaddr_in6.sin6_port = htons(REMOTEPORT);
+    inet_pton(AF_INET6, MULTICASTIP_V6, &remoteaddr_in6.sin6_addr);
+
+    memset(&remoteaddr_in, 0, sizeof(remoteaddr_in));
+    remoteaddr_in.sin6_family = AF_INET6;
+    remoteaddr_in.sin6_port = htons(REMOTEPORT);
+    inet_pton(AF_INET6, MULTICASTIP, &remoteaddr_in.sin6_addr);
 
     map<string, vector<pair<uint32_t, string>>> chunksMap{};
 
@@ -89,7 +96,6 @@ void UDPServer::receive()
         sockaddr_in6* s = (sockaddr_in6*)&clientAddr;
         if (IN6_IS_ADDR_V4MAPPED(&s->sin6_addr))
         {
-            inet_pton(AF_INET6, MULTICASTIP, &remoteaddr_in6.sin6_addr);
             struct in_addr ipv4Addr;
             memcpy(&ipv4Addr, &s->sin6_addr.s6_addr[12], sizeof(ipv4Addr));
             inet_ntop(AF_INET, &ipv4Addr, addr, sizeof(addr));
@@ -97,7 +103,6 @@ void UDPServer::receive()
         }
         else
         {
-            inet_pton(AF_INET6, MULTICASTIP_V6, &remoteaddr_in6.sin6_addr);
             inet_ntop(AF_INET6, &s->sin6_addr, addr, sizeof(addr));
             clientInfo.ipVersion = IPVersion::IPv6;
         }
@@ -110,7 +115,7 @@ void UDPServer::receive()
         memcpy(&sequence, buf + 5, 4);
         memcpy(&totalChunks, buf + 9, 4);
         string data(buf + HEADERSIZE, recvBytes - HEADERSIZE);
-        
+
         if (sequence > totalChunks)
             continue;
 
@@ -146,16 +151,23 @@ void UDPServer::receive()
                 memcpy(buffer.data() + 5, &sequence, sizeof(sequence));
                 memcpy(buffer.data() + 9, &totalChunks, sizeof(totalChunks));
                 memcpy(buffer.data() + 13, data.c_str(), dataSize);
-                
+
                 int sendBytes = sendto(_sock, buffer.data(), buffer.size(), 0, (sockaddr*)&remoteaddr_in6, sizeof(remoteaddr_in6));
                 if (sendBytes == SOCKET_ERROR)
                 {
                     logError("sendto() failed");
                 }
+
+                sendBytes = sendto(_sock, buffer.data(), buffer.size(), 0, (sockaddr*)&remoteaddr_in, sizeof(remoteaddr_in));
+                if (sendBytes == SOCKET_ERROR)
+                {
+                    logError("sendto() failed");
+                }
+
             }
-            
+
             std::cout << "received all " << totalChunks << " chunks" << endl;
             chunks.clear();
-        }   
+        }
     }
 }

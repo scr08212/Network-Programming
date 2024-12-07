@@ -17,8 +17,8 @@
 #define DRAWING 0X03
 #define CLEARCANVAS 0x04
 
-#define MULTICASTIP "235.7.8.9"
-#define MULTICASTIP_V6 "FF12::1:2:3:4"
+#define MULTICASTIP "224.0.0.1"
+#define MULTICASTIP_V6 "ff02::1"
 #define LOCALPORT 9002 // 멀티캐스팅 포트
 
 Client::Client()
