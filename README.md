@@ -38,12 +38,11 @@ IPv4·IPv6 환경의 메시지·파일 전송과 실시간 공동 그리기를 �
 
 | 구분 | 사용 기술 |
 | --- | --- |
-| 언어 | C++ (Server: C++17, Client: C++20) |
-| 네트워크 | WinSock2, TCP, UDP, IPv4, IPv6 |
-| 동시성 | `std::thread`, Blocking Socket |
+| Language | C++17 (Server), C++20 (Client) |
+| Networking | WinSock2, TCP/UDP, IPv4/IPv6 |
+| Concurrency | `std::thread` |
 | GUI | Win32 API, GDI |
-| 파일 처리 | `std::filesystem`, `std::ifstream`, `std::ofstream` |
-| 빌드 | Visual Studio 솔루션, MSVC `v143`, Windows SDK `10.0` 설정 |
+| Development | Visual Studio, MSVC `v143` |
 
 ## System Architecture
 
