@@ -166,21 +166,31 @@ UDP 클라이언트는 멀티캐스트 수신을 위해 `9002`에 바인딩합�
 
 ### Wireshark 패킷 분석
 
-![Wireshark의 TCP 패킷과 서버 콘솔 실행 로그](docs/assets/tcp-wireshark.png)
+Wireshark로 캡처한 실제 패킷에서 **TCP 메시지 형식과 서버 중계**, **UDP Sequence ACK와 멀티캐스트 송신**을 확인했습니다. 다음은 원본 캡처의 대표 프레임 발췌입니다.
 
-*IPv4/TCP의 `hello` Payload와 서버 접속·메시지 수신 로그를 보여주는 실행 화면입니다.*
+**TCP — 메시지 헤더 및 서버 중계**
 
-별도로 수집한 `packet.pcapng`(전체 **18,437개 패킷**)를 분석하여 다음 항목을 확인했습니다. 아래 표의 프레임 번호는 해당 캡처 파일 기준이며, 위 스크린샷은 별도로 캡처한 화면입니다.
+```text
+Frame 113  Client → Server     01 13 00 00 00       (MESSAGE, 길이 19B)
+Frame 115  Client → Server     Hello from client 1   (Payload 19B)
+Frame 117  Server → Client A   헤더 + Payload        (24B)
+Frame 119  Server → Client B   헤더 + Payload        (24B)
+```
 
-| 관찰 대상 | 패킷 근거 | 확인 내용 |
-| --- | --- | --- |
-| TCP 연결 | Frame `98–100`, `107–109` | IPv4 루프백에서 두 클라이언트의 TCP handshake |
-| TCP 메시지 | Frame `113`, `115` | `01 13 00 00 00` 헤더와 `Hello from client 1` 데이터 |
-| TCP 중계 | Frame `117`, `119` | 서버가 두 클라이언트 연결에 메시지 송신 |
-| UDP 데이터·ACK | Frame `11191`, `11192` | UDP 청크 송신과 4바이트 Sequence ACK |
-| UDP Multicast | Frame `11193`, `11194` | IPv6 `ff02::1`, IPv4 `224.0.0.1`로의 송신 |
+5바이트 헤더의 `0x01`은 `MESSAGE` 타입이며, `13 00 00 00`은 현재 구현의 Little Endian 기준으로 Payload 길이 19바이트를 나타냅니다. 서버가 동일한 메시지를 두 TCP 클라이언트에 전달한 것도 확인했습니다.
 
-이는 **프로토콜 형식 및 서버의 송신 동작**에 대한 캡처 근거입니다. 특히 UDP ACK는 서버의 수신 확인이며, 최종 수신 클라이언트까지의 전달을 의미하지 않습니다. 해당 캡처에는 IPv6/TCP 이미지 오류 패킷이 없고, 확인된 UDP 청크는 `TotalChunks = 1`이므로 **UDP 다중 청크 재조립 성공** 또는 **IPv6/TCP 오류 원인**을 이 캡처만으로 검증했다고 주장하지 않습니다.
+**UDP — 청크 ACK 및 멀티캐스트 송신**
+
+```text
+Frame 11191  Client → Server:9001       DATA, Seq=1, TotalChunks=1, "Client 1"
+Frame 11192  Server → Client            ACK  01 00 00 00 (Seq=1)
+Frame 11193  Server → ff02::1:9002      IPv6 Multicast
+Frame 11194  Server → 224.0.0.1:9002   IPv4 Multicast
+```
+
+UDP 데이터그램의 수신에 대해 서버가 4바이트 Sequence ACK를 응답하고, IPv4·IPv6 멀티캐스트 주소로 메시지를 송신하는 과정을 확인했습니다.
+
+> **검증 범위:** 발췌한 UDP 메시지는 단일 청크(`TotalChunks = 1`)입니다. ACK는 서버의 청크 수신을 확인할 뿐 최종 클라이언트 수신을 보장하지 않습니다. 이 캡처만으로 다중 청크 재조립의 정상 동작이나 TCP/IPv6 이미지 전송 오류의 원인을 입증할 수는 없습니다.
 
 ## Technical Limitations
 
@@ -211,8 +221,7 @@ Network-Programming/
 ├── docs/
 │   └── assets/
 │       ├── architecture.png          # 정적 시스템 구성도
-│       ├── collaborative-drawing.png # IPv6/TCP 공동 그리기 실행 화면
-│       └── tcp-wireshark.png        # TCP 패킷 및 서버 로그 캡처
+│       └── collaborative-drawing.png # IPv6/TCP 공동 그리기 실행 화면
 ├── DummyText.txt
 ├── cat.png
 ├── dog.jpg
