@@ -38,7 +38,7 @@ IPv4·IPv6 환경의 메시지·파일 전송과 실시간 공동 그리기를 �
 
 | 구분 | 사용 기술 |
 | --- | --- |
-| Language | C++17 (Server), C++20 (Client) |
+| Language | C++17 (Server / Client) |
 | Networking | WinSock2, TCP/UDP, IPv4/IPv6 |
 | Concurrency | `std::thread` |
 | GUI | Win32 API, GDI |
